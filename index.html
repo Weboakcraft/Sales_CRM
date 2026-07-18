@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OakCraft Sales CRM — Enquiry to Dispatch</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{
   color-scheme:light;
@@ -238,6 +239,9 @@ const I = {
   up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m6 15 6-6 6 6"/></svg>',
   down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m6 9 6 6 6-6"/></svg>',
   check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6 9 17l-5-5"/></svg>',
+  download:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>',
+  upload:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>',
+  eye:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
 };
 </script>
 <script>
@@ -524,6 +528,7 @@ function renderEnquiries(){
         <div class="tools">
           <select class="field" id="f-stage" onchange="enqFilter.stage=this.value;paintEnq()"><option value="">All Stages</option>${['New','Contacted','Qualified','Quoted','Won','Lost'].map(s=>`<option>${s}</option>`).join('')}</select>
           <select class="field" id="f-sales" onchange="enqFilter.sales=this.value;paintEnq()"><option value="">All Salespersons</option>${SALES.map(s=>`<option>${s}</option>`).join('')}</select>
+          ${dlBtn('enquiries')}
           <button class="btn primary sm" onclick="openEnqModal()">${I.plus}Add Enquiry</button>
         </div>
       </div>
@@ -571,14 +576,7 @@ function renderQuotations(){
   const list=DB.quotations();
   content.innerHTML=table(`Quotations`,list.length,
     `<th>Quote ID</th><th>Date</th><th>Customer</th><th>Product</th><th>Amount</th><th>Discount</th><th>Valid Till</th><th>Owner</th><th>Status</th><th></th>`,
-    ()=>{const q=(document.getElementById('globalSearch').value||'').toLowerCase();
-      return list.filter(x=>!q||[x.id,x.customer,x.product].join(' ').toLowerCase().includes(q)).sort((a,b)=>b.date.localeCompare(a.date)).map(x=>`<tr>
-      <td class="strong tabular">${x.id}</td><td class="sub tabular">${x.date}</td><td>${userCell(x.customer)}</td>
-      <td>${x.product} <span class="sub">×${x.qty}</span></td><td class="strong tabular">${money(x.amount)}</td>
-      <td class="tabular">${x.discount}%</td><td class="sub tabular">${x.validTill}</td><td>${x.salesperson.split(' ')[0]}</td>
-      <td>${quoChip(x.status)}</td>
-      <td><div class="row-actions" style="display:flex"><button onclick="convertQuote('${x.id}')" title="Convert to Order">${I.arrow}</button><button onclick="delRow('quotations','${x.id}')" title="Delete">${I.trash}</button></div></td>
-    </tr>`).join('');},'quo-body','No quotations yet.');
+    'quo-body','No quotations yet.',dlBtn('quotations')+`<a class="btn primary sm" href="quotation-builder.html" target="_blank" style="text-decoration:none">${I.doc}Quotation Builder</a>`);
   paintTable('quo-body');
 }
 
@@ -586,7 +584,8 @@ function renderQuotations(){
 function renderOrders(){
   const list=DB.orders();
   content.innerHTML=`<div class="card"><div class="card-head"><h3>Orders <span class="chip c-neutral" style="margin-left:4px">${list.length}</span></h3>
-    <div class="tools"><select class="field" id="f-ostat" onchange="paintTable('ord-body')"><option value="">All Status</option>${['Confirmed','In Production','Ready','Dispatched','Delivered','Cancelled'].map(s=>`<option>${s}</option>`).join('')}</select></div></div>
+    <div class="tools"><select class="field" id="f-ostat" onchange="paintTable('ord-body')"><option value="">All Status</option>${['Confirmed','In Production','Ready','Dispatched','Delivered','Cancelled'].map(s=>`<option>${s}</option>`).join('')}</select>${dlBtn('orders')}</div></div>
+    <div style="padding:8px 20px 0;font-size:12px;color:var(--muted)">Tip: click any order row to see full details.</div>
     <div style="overflow-x:auto"><table><thead><tr><th>Order ID</th><th>Date</th><th>Customer</th><th>Product</th><th>Amount</th><th>Payment</th><th>Exp. Dispatch</th><th>Status</th><th>Advance Stage</th></tr></thead>
     <tbody id="ord-body"></tbody></table></div></div>`;
   paintTable('ord-body');
@@ -595,7 +594,7 @@ function renderOrders(){
 /* ---------- Dispatch ---------- */
 function renderDispatch(){
   const list=DB.dispatch();
-  content.innerHTML=`<div class="card"><div class="card-head"><h3>Dispatch & Delivery <span class="chip c-neutral" style="margin-left:4px">${list.length}</span></h3></div>
+  content.innerHTML=`<div class="card"><div class="card-head"><h3>Dispatch & Delivery <span class="chip c-neutral" style="margin-left:4px">${list.length}</span></h3><div class="tools">${dlBtn('dispatch')}</div></div>
     <div style="overflow-x:auto"><table><thead><tr><th>Dispatch ID</th><th>Order</th><th>Customer</th><th>Product</th><th>Courier</th><th>Tracking No.</th><th>Dispatched</th><th>ETA</th><th>Status</th></tr></thead>
     <tbody id="dis-body"></tbody></table></div></div>`;
   paintTable('dis-body');
@@ -605,7 +604,7 @@ function renderDispatch(){
 function renderCustomers(){
   const list=DB.customers(), ord=DB.orders();
   content.innerHTML=`<div class="card"><div class="card-head"><h3>Customers <span class="chip c-neutral" style="margin-left:4px">${list.length}</span></h3>
-    <div class="tools"><button class="btn primary sm" onclick="openCustModal()">${I.plus}Add Customer</button></div></div>
+    <div class="tools">${dlBtn('customers')}<button class="btn primary sm" onclick="openCustModal()">${I.plus}Add Customer</button></div></div>
     <div style="overflow-x:auto"><table><thead><tr><th>Customer ID</th><th>Company</th><th>Contact Person</th><th>Email</th><th>Phone</th><th>City</th><th>Type</th><th>Orders</th><th>Lifetime Value</th><th></th></tr></thead>
     <tbody id="cust-body"></tbody></table></div></div>`;
   paintTable('cust-body');
@@ -622,8 +621,12 @@ function renderProducts(){
       ${dcard('cart','rgba(237,161,0,.14)','#b06a00',list.filter(p=>p.stock>0&&p.stock<10).length,'Low Stock','','up').replace('<span class="delta up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m6 15 6-6 6 6"/></svg></span>','')}
       ${dcard('truck','rgba(208,59,59,.12)','#d03b3b',list.filter(p=>p.stock===0).length,'Out of Stock','','up').replace('<span class="delta up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m6 15 6-6 6 6"/></svg></span>','')}
     </div>
+    <input type="file" id="bulkFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleBulk(this)">
     <div class="card"><div class="card-head"><h3>Product Catalog</h3>
       <div class="tools"><select class="field" id="f-cat" onchange="paintTable('prod-body')"><option value="">All Categories</option>${CATS.map(c=>`<option>${c}</option>`).join('')}</select>
+      ${dlBtn('products')}
+      <button class="btn sm" onclick="downloadProductTemplate()">${I.download}Template</button>
+      <button class="btn sm" onclick="triggerBulk()">${I.upload}Bulk Upload</button>
       <button class="btn primary sm" onclick="openProdModal()">${I.plus}Add Product</button></div></div>
     <div style="overflow-x:auto"><table><thead><tr><th>Product ID</th><th>Name</th><th>SKU</th><th>Category</th><th>Unit Price</th><th>Stock</th><th>Stock Value</th><th>Status</th><th></th></tr></thead>
     <tbody id="prod-body"></tbody></table></div></div>`;
@@ -631,8 +634,8 @@ function renderProducts(){
 }
 
 /* ---------- unified table painter ---------- */
-function table(title,count,head,rowsFn,bodyId,empty){
-  return `<div class="card"><div class="card-head"><h3>${title} <span class="chip c-neutral" style="margin-left:4px">${count}</span></h3></div>
+function table(title,count,head,bodyId,empty,tools){
+  return `<div class="card"><div class="card-head"><h3>${title} <span class="chip c-neutral" style="margin-left:4px">${count}</span></h3>${tools?`<div class="tools">${tools}</div>`:''}</div>
     <div style="overflow-x:auto"><table><thead><tr>${head}</tr></thead><tbody id="${bodyId}"></tbody></table></div></div>`;
 }
 function paintTable(bodyId){
@@ -642,10 +645,10 @@ function paintTable(bodyId){
   if(bodyId==='ord-body'){
     const f=document.getElementById('f-ostat')?.value||'';
     let rows=DB.orders().filter(o=>(!f||o.status===f)&&(!q||[o.id,o.customer,o.product].join(' ').toLowerCase().includes(q))).sort((a,b)=>b.date.localeCompare(a.date));
-    html=rows.map(o=>`<tr><td class="strong tabular">${o.id}</td><td class="sub tabular">${o.date}</td><td>${userCell(o.customer)}</td>
+    html=rows.map(o=>`<tr style="cursor:pointer" onclick="openOrderDetail('${o.id}')"><td class="strong tabular">${o.id}</td><td class="sub tabular">${o.date}</td><td>${userCell(o.customer)}</td>
       <td>${o.product} <span class="sub">×${o.qty}</span></td><td class="strong tabular">${money(o.amount)}</td><td>${payChip(o.payment)}</td>
       <td class="sub tabular">${o.expDispatch}</td><td>${orderChip(o.status)}</td>
-      <td>${nextStageBtn(o)}</td></tr>`).join('')||emptyRow(9);
+      <td onclick="event.stopPropagation()">${nextStageBtn(o)}</td></tr>`).join('')||emptyRow(9);
   } else if(bodyId==='dis-body'){
     let rows=DB.dispatch().filter(d=>!q||[d.id,d.customer,d.tracking,d.orderId].join(' ').toLowerCase().includes(q)).sort((a,b)=>b.dispatchedOn.localeCompare(a.dispatchedOn));
     html=rows.map(d=>`<tr><td class="strong tabular">${d.id}</td><td class="tabular">${d.orderId}</td><td>${userCell(d.customer)}</td>
@@ -833,6 +836,103 @@ function exportData(){
   toast('Data exported ✓');
 }
 function resetDemo(){ if(!confirm('Reset all data to demo seed?'))return; ['enquiries','quotations','orders','dispatch','customers','products','crm_seeded'].forEach(k=>{try{localStorage.removeItem(k)}catch(e){delete mem[k]}}); seed(); toast('Demo data restored ✓'); setView(state.view); }
+
+/* ============================================================
+   EXCEL EXPORT  (SheetJS)
+   ============================================================ */
+function xlsxReady(){ return typeof XLSX!=='undefined'; }
+function exportExcel(section){
+  if(!xlsxReady()){ toast('Excel library still loading — try again'); return; }
+  const q=(document.getElementById('globalSearch')?.value||'').toLowerCase();
+  let rows=[], name=section;
+  if(section==='enquiries'){ rows=DB.enquiries().map(e=>({'Enquiry ID':e.id,Date:e.date,Customer:e.customer,Product:e.product,Qty:e.qty,Source:e.source,Salesperson:e.salesperson,Value:e.value,Priority:e.priority,Stage:e.stage,Note:e.note})); }
+  else if(section==='quotations'){ rows=DB.quotations().map(x=>({'Quote ID':x.id,Date:x.date,Customer:x.customer,Product:x.product,Qty:x.qty,Amount:x.amount,'Discount %':x.discount,'Valid Till':x.validTill,Salesperson:x.salesperson,Status:x.status})); }
+  else if(section==='orders'){ rows=DB.orders().map(o=>({'Order ID':o.id,Date:o.date,Customer:o.customer,Product:o.product,Qty:o.qty,Amount:o.amount,Payment:o.payment,'Exp. Dispatch':o.expDispatch,Status:o.status,Salesperson:o.salesperson})); }
+  else if(section==='dispatch'){ rows=DB.dispatch().map(d=>({'Dispatch ID':d.id,'Order ID':d.orderId,Customer:d.customer,Product:d.product,Qty:d.qty,Courier:d.courier,'Tracking No':d.tracking,Dispatched:d.dispatchedOn,ETA:d.eta,Status:d.status})); }
+  else if(section==='customers'){ const ord=DB.orders(); rows=DB.customers().map(c=>{const co=ord.filter(o=>o.custId===c.id);return {'Customer ID':c.id,Company:c.name,'Contact Person':c.contact,Email:c.email,Phone:c.phone,City:c.city,Type:c.type,Orders:co.length,'Lifetime Value':co.reduce((s,o)=>s+o.amount,0)};}); }
+  else if(section==='products'){ rows=DB.products().map(p=>({'Product ID':p.id,Name:p.name,SKU:p.sku,Category:p.cat,'Unit Price':p.price,Stock:p.stock,Unit:p.unit,'Stock Value':p.price*p.stock})); }
+  if(!rows.length){ toast('Nothing to export'); return; }
+  const ws=XLSX.utils.json_to_sheet(rows);
+  // auto column widths
+  const cols=Object.keys(rows[0]).map(k=>({wch:Math.min(Math.max(k.length,...rows.map(r=>String(r[k]??'').length))+2,40)}));
+  ws['!cols']=cols;
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,name.charAt(0).toUpperCase()+name.slice(1));
+  const stamp=new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb,`OakCraft-${name}-${stamp}.xlsx`);
+  toast('Downloaded '+rows.length+' rows ✓');
+}
+function dlBtn(section){ return `<button class="btn sm" onclick="exportExcel('${section}')">${I.download}Excel</button>`; }
+
+/* ============================================================
+   BULK PRODUCT UPLOAD
+   ============================================================ */
+function downloadProductTemplate(){
+  if(!xlsxReady()){ toast('Excel library loading…'); return; }
+  const sample=[{Name:'Executive Office Desk',SKU:'OFD-EX-140',Category:'Office Furniture',Price:24500,Stock:42,Unit:'pc'},
+    {Name:'Ergonomic Mesh Chair',SKU:'SEAT-ERG-02',Category:'Seating',Price:8900,Stock:120,Unit:'pc'}];
+  const ws=XLSX.utils.json_to_sheet(sample); ws['!cols']=[{wch:28},{wch:16},{wch:20},{wch:12},{wch:10},{wch:8}];
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Products');
+  XLSX.writeFile(wb,'OakCraft-products-template.xlsx');
+  toast('Template downloaded ✓');
+}
+function triggerBulk(){ document.getElementById('bulkFile').click(); }
+function handleBulk(input){
+  const file=input.files[0]; if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'binary'});
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+      if(!rows.length){ toast('File is empty'); return; }
+      const list=DB.products(); let added=0;
+      rows.forEach(r=>{
+        const name=r.Name||r.name||r['Product Name']; if(!name)return;
+        list.unshift({ id:uid('PRD-'), name:String(name),
+          sku:String(r.SKU||r.Sku||r.sku||''), cat:String(r.Category||r.category||r.Cat||'Office Furniture'),
+          price:Number(r.Price||r.price||r.Rate||r.rate||0), stock:Number(r.Stock||r.stock||0),
+          unit:String(r.Unit||r.unit||'pc') });
+        added++;
+      });
+      DB.save('products',list); input.value='';
+      toast(added+' products imported ✓'); setView('products');
+    }catch(err){ toast('Could not read file — check format'); console.error(err); }
+  };
+  reader.readAsBinaryString(file);
+}
+
+/* ============================================================
+   ORDER DETAILS
+   ============================================================ */
+function openOrderDetail(id){
+  const o=DB.orders().find(x=>x.id===id); if(!o)return;
+  const cust=DB.customers().find(c=>c.id===o.custId)||{};
+  const quote=DB.quotations().find(q=>q.id===o.quoteId);
+  const disp=DB.dispatch().find(d=>d.orderId===o.id);
+  const flowIdx=ORDER_FLOW.indexOf(o.status);
+  const timeline=ORDER_FLOW.map((s,i)=>{
+    const done=i<=flowIdx && o.status!=='Cancelled';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0">
+      <div style="width:22px;height:22px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;background:${done?'var(--brand)':'var(--surface-2)'};border:1px solid ${done?'transparent':'var(--border)'};color:#fff">${done?'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>':''}</div>
+      <div style="font-size:13px;font-weight:${i===flowIdx?'700':'500'};color:${done?'var(--text)':'var(--muted)'}">${s}</div></div>`;
+  }).join('');
+  const line=(a,b)=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text-2);font-size:13px">${a}</span><span style="font-weight:650;font-size:13px" class="tabular">${b}</span></div>`;
+  openModal(`<div class="modal-head"><h3>Order ${o.id}</h3><button class="icon-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">${orderChip(o.status)}${payChip(o.payment)}</div>
+      <div class="section-title" style="margin-top:0">Customer</div>
+      ${line('Company',o.customer)}${line('Contact',cust.contact||'—')}${line('Phone',cust.phone||'—')}${line('City',cust.city||'—')}
+      <div class="section-title">Order</div>
+      ${line('Product',o.product)}${line('Quantity',o.qty+' '+(DB.products().find(p=>p.id===o.prodId)?.unit||'pc'))}${line('Order Value',money(o.amount))}${line('Order Date',o.date)}${line('Expected Dispatch',o.expDispatch)}${line('Salesperson',o.salesperson)}${quote?line('From Quotation',quote.id):''}
+      <div class="section-title">Dispatch</div>
+      ${disp?`${line('Courier',disp.courier)}${line('Tracking No',disp.tracking)}${line('Dispatched On',disp.dispatchedOn)}${line('ETA',disp.eta)}${line('Delivery Status',disp.status)}`:'<div style="color:var(--muted);font-size:13px;padding:6px 0">Not dispatched yet.</div>'}
+      <div class="section-title">Progress</div>
+      <div>${timeline}</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">Close</button>
+      ${o.status!=='Delivered'&&o.status!=='Cancelled'?`<button class="btn primary" onclick="advanceOrder('${o.id}');closeModal();openOrderDetail('${o.id}')">${I.arrow}Advance to ${ORDER_FLOW[flowIdx+1]}</button>`:''}
+    </div>`);
+}
 
 /* ---------- toast + badges + theme ---------- */
 let toastT;
