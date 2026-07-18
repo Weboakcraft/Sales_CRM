@@ -276,6 +276,14 @@ const CLOUD = {
           try{ localStorage.setItem(k, JSON.stringify(rows)); }catch(e){ mem[k]=rows; }
         }
       });
+      // object-shaped configs
+      ['formfields','permissions'].forEach(k=>{
+        const arr = d[k];
+        if(Array.isArray(arr)){
+          const cfg = arr.find(x=>x && x.id==='__config__');
+          if(cfg && cfg.data){ try{ localStorage.setItem(k, JSON.stringify(cfg.data)); }catch(e){ mem[k]=cfg.data; } }
+        }
+      });
       this.ready = true;
       return true;
     }catch(e){ console.warn('CLOUD pull failed', e); return false; }
@@ -289,6 +297,15 @@ const CLOUD = {
       fetch(this.url, {method:'POST', redirect:'follow', headers:{'Content-Type':'text/plain;charset=utf-8'},
         body: JSON.stringify({action:'saveMany', collection:key, records})
       }).catch(e=>console.warn('CLOUD push failed', key, e));
+    }, 400);
+  },
+  // push a single object-shaped collection (e.g. formfields/permissions) as one record
+  pushObj(key, obj){
+    clearTimeout(this._timers['obj_'+key]);
+    this._timers['obj_'+key] = setTimeout(()=>{
+      fetch(this.url, {method:'POST', redirect:'follow', headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({action:'save', collection:key, record:{id:'__config__', data:obj}})
+      }).catch(e=>console.warn('CLOUD pushObj failed', key, e));
     }, 400);
   }
 };
@@ -930,11 +947,13 @@ function renderAdmin(){
     <div class="grid-3">
       <div class="panel"><h3>Team Members</h3><div style="font-size:32px;font-weight:750;margin-top:10px" class="tabular">${users.length}</div><div class="lbl" style="color:var(--text-2)">${users.filter(u=>u.status==='Active').length} active · ${users.filter(u=>u.role==='Administrator').length} admins</div></div>
       <div class="panel"><h3>Records in System</h3><div style="font-size:32px;font-weight:750;margin-top:10px" class="tabular">${DB.enquiries().length+DB.orders().length+DB.customers().length+DB.products().length}</div><div class="lbl" style="color:var(--text-2)">across all modules</div></div>
-      <div class="panel"><h3>Data Storage</h3><div style="font-size:32px;font-weight:750;margin-top:10px" class="tabular">Local</div><div class="lbl" style="color:var(--text-2)">Browser storage (demo)</div></div>
+      <div class="panel"><h3>Data Storage</h3><div style="font-size:26px;font-weight:750;margin-top:10px" class="tabular">Google&nbsp;Sheet</div><div class="lbl" style="color:var(--text-2)">Cloud · auto-synced</div></div>
     </div>
     <div class="card" style="margin-bottom:16px"><div class="card-head"><h3>User Management <span class="chip c-neutral" style="margin-left:4px">${users.length}</span></h3><div class="tools"><button class="btn primary sm" onclick="openUserModal()">${I.plus}Add User</button></div></div>
     <div style="overflow-x:auto"><table><thead><tr><th>Name</th><th>Login Email / ID</th><th>Mobile</th><th>Role</th><th>Status</th><th></th></tr></thead>
-    <tbody>${users.map(u=>`<tr><td>${userCell(u.name)}</td><td class="sub">${u.email}</td><td class="sub tabular">${u.phone||'—'}</td><td><span class="chip ${u.role==='Administrator'?'c-quo':u.role==='Sales Manager'?'c-ship':'c-new'}">${u.role}</span></td><td>${u.status==='Active'?'<span class="chip c-won">Active</span>':'<span class="chip c-neutral">Inactive</span>'}</td><td><div class="row-actions" style="display:flex"><button onclick="openUserModal('${u.email}')" title="Edit">${I.edit}</button>${u.email!=='mis@oakcraft.in'?`<button onclick="delUser('${u.email}')" title="Remove">${I.trash}</button>`:''}</div></td></tr>`).join('')}</tbody></table></div></div>
+    <tbody>${users.map(u=>`<tr><td>${userCell(u.name)}</td><td class="sub">${u.email}</td><td class="sub tabular">${u.phone||'—'}</td><td><span class="chip ${u.role==='Administrator'?'c-quo':u.role==='Sales Manager'?'c-ship':'c-new'}">${u.role}</span></td><td>${u.status==='Active'?'<span class="chip c-won">Active</span>':'<span class="chip c-neutral">Inactive</span>'}</td><td><div class="row-actions" style="display:flex"><button onclick="openUserModal('${u.email}')" title="Edit">${I.edit}</button><button onclick="openPermsModal('${u.email}')" title="Permissions">${I.gear||I.check}</button>${u.email!=='mis@oakcraft.in'?`<button onclick="delUser('${u.email}')" title="Remove">${I.trash}</button>`:''}</div></td></tr>`).join('')}</tbody></table></div></div>
+
+    <div class="card" style="margin-bottom:16px"><div class="card-head"><h3>Form Builder</h3></div>      <div style="padding:16px 20px;color:var(--text-2);font-size:13px">Add, edit or remove questions in your Enquiry and Order forms. Choose the answer type for each question (short text, long description, number, date, dropdown, checkbox, or file upload).</div>      <div style="padding:0 20px 18px;display:flex;gap:10px;flex-wrap:wrap">        <button class="btn primary" onclick="openFormBuilder('enquiry')">${I.edit}Enquiry Form Builder</button>        <button class="btn primary" onclick="openFormBuilder('order')">${I.edit}Order Form Builder</button>      </div>    </div>
 
     <div class="grid-2">
       <div class="panel"><h3>Pipeline Configuration</h3>
@@ -946,19 +965,193 @@ function renderAdmin(){
       <div class="panel"><h3>Data & Settings</h3>
         <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
           <button class="btn" onclick="exportData()">${I.arrow}Export all data (JSON)</button>
-          <button class="btn" onclick="resetDemo()">${I.trash}Reset to demo data</button>
+          <button class="btn" onclick="resetDemo()">${I.trash}Clear all data</button>
         </div>
         <p style="color:var(--muted);font-size:12px;margin-top:14px">Company: OakCraft · Currency: INR (₹) · Timezone: Asia/Kolkata</p>
       </div>
     </div>`;
 }
+
+/* ===== OakCraft Form Builder + Permissions ===== */
+const FIELD_TYPES = [
+  {v:'text',   t:'Short Text'},
+  {v:'longtext',t:'Long Description'},
+  {v:'number', t:'Number'},
+  {v:'date',   t:'Date'},
+  {v:'dropdown',t:'Dropdown (choices)'},
+  {v:'checkbox',t:'Checkbox (yes/no)'},
+  {v:'file',   t:'File Upload'}
+];
+const DEFAULT_FORMS = {
+  enquiry: [
+    {id:'f_cust', label:'Customer', type:'dropdown', source:'customers', required:true, locked:true},
+    {id:'f_prod', label:'Product', type:'dropdown', source:'products', required:true, locked:true},
+    {id:'f_qty',  label:'Quantity', type:'number', required:true, locked:true},
+    {id:'f_src',  label:'Source', type:'dropdown', options:['IndiaMART','JustDial','Website','Referral','Trade Show','Cold Call']},
+    {id:'f_sales',label:'Salesperson', type:'text'},
+    {id:'f_prio', label:'Priority', type:'dropdown', options:['Low','Medium','High']},
+    {id:'f_note', label:'Note', type:'longtext'}
+  ],
+  order: [
+    {id:'o_cust', label:'Customer', type:'dropdown', source:'customers', required:true, locked:true},
+    {id:'o_prod', label:'Product', type:'dropdown', source:'products', required:true, locked:true},
+    {id:'o_qty',  label:'Quantity', type:'number', required:true, locked:true},
+    {id:'o_sales',label:'Salesperson', type:'text'},
+    {id:'o_pay',  label:'Payment', type:'dropdown', options:['Pending','Partial','Paid']},
+    {id:'o_stat', label:'Status', type:'dropdown', options:['Confirmed','In Production','Ready','Dispatched','Delivered','Cancelled']},
+    {id:'o_img',  label:'Upload Product Image', type:'file'},
+    {id:'o_note', label:'Note', type:'longtext'}
+  ]
+};
+function getForm(which){
+  const all = store.get('formfields', null) || {};
+  if(!all[which]){ all[which] = JSON.parse(JSON.stringify(DEFAULT_FORMS[which])); }
+  return all[which];
+}
+function saveForm(which, fields){
+  const all = store.get('formfields', null) || {};
+  all[which] = fields;
+  // store.set pushes 'formfields' - but CLOUD.keys are arrays; store as wrapped
+  store.set('formfields', all);
+  try{ CLOUD.pushObj('formfields', all); }catch(e){}
+}
+function openFormBuilder(which){
+  const fields = getForm(which);
+  const title = which==='enquiry' ? 'Enquiry Form' : 'Order Form';
+  const rows = fields.map((f,i)=>{
+    const locked = f.locked ? ' <span class="chip c-neutral" style="font-size:10px">core</span>' : '';
+    const tName = (FIELD_TYPES.find(x=>x.v===f.type)||{}).t || f.type;
+    return '<tr data-i="'+i+'"><td><b>'+f.label+'</b>'+locked+'</td><td class="sub">'+tName+(f.options?(' · '+f.options.length+' choices'):'')+'</td><td>'+(f.required?'Required':'Optional')+'</td>'+
+      '<td><div class="row-actions" style="display:flex">'+
+      '<button onclick="editFormField(\''+which+'\','+i+')" title="Edit">'+I.edit+'</button>'+
+      (f.locked?'':'<button onclick="delFormField(\''+which+'\','+i+')" title="Remove">'+I.trash+'</button>')+
+      '</div></td></tr>';
+  }).join('');
+  openModal('<div class="modal-head"><h3>'+title+' Builder</h3><button class="icon-btn" onclick="closeModal()">\u2715</button></div>'+
+    '<div class="modal-body">'+
+    '<p style="color:var(--text-2);font-size:13px;margin-bottom:10px">Add, edit, or remove questions. Core fields are required by the pipeline and can be edited but not removed.</p>'+
+    '<div style="overflow-x:auto"><table><thead><tr><th>Question</th><th>Answer Type</th><th></th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<button class="btn primary sm" style="margin-top:12px" onclick="editFormField(\''+which+'\',-1)">'+I.plus+'Add Question</button>'+
+    '</div>'+
+    '<div class="modal-foot"><button class="btn primary" onclick="closeModal()">Done</button></div>');
+}
+function editFormField(which, idx){
+  const fields = getForm(which);
+  const f = idx>=0 ? fields[idx] : {label:'',type:'text',required:false,options:[]};
+  const typeOpts = FIELD_TYPES.map(x=>'<option value="'+x.v+'" '+(f.type===x.v?'selected':'')+'>'+x.t+'</option>').join('');
+  openModal('<div class="modal-head"><h3>'+(idx>=0?'Edit':'Add')+' Question</h3><button class="icon-btn" onclick="openFormBuilder(\''+which+'\')">\u2715</button></div>'+
+    '<div class="modal-body">'+
+    '<div class="form-row"><label>Question / Field Name</label><input id="ff-label" value="'+(f.label||'')+'" placeholder="e.g. Preferred Delivery Date" '+(f.locked?'':'')+'></div>'+
+    '<div class="form-row"><label>Answer Type</label><select id="ff-type" onchange="ffTypeChange()" '+(f.locked?'disabled':'')+'>'+typeOpts+'</select></div>'+
+    '<div class="form-row" id="ff-opts-row" style="display:'+(f.type==='dropdown'?'block':'none')+'"><label>Dropdown Choices (one per line)</label><textarea id="ff-opts" rows="4" placeholder="Option 1\nOption 2">'+((f.options||[]).join('\n'))+'</textarea></div>'+
+    '<div class="form-row"><label><input type="checkbox" id="ff-req" '+(f.required?'checked':'')+'> Required field</label></div>'+
+    '</div>'+
+    '<div class="modal-foot"><button class="btn" onclick="openFormBuilder(\''+which+'\')">Cancel</button><button class="btn primary" onclick="saveFormField(\''+which+'\','+idx+')">'+I.check+'Save Question</button></div>');
+}
+function ffTypeChange(){
+  const t = document.getElementById('ff-type').value;
+  document.getElementById('ff-opts-row').style.display = (t==='dropdown')?'block':'none';
+}
+function saveFormField(which, idx){
+  const fields = getForm(which);
+  const label = (document.getElementById('ff-label').value||'').trim();
+  if(!label){ toast('Question name is required'); return; }
+  const type = document.getElementById('ff-type').value;
+  const required = document.getElementById('ff-req').checked;
+  let options = [];
+  if(type==='dropdown'){ options = (document.getElementById('ff-opts').value||'').split('\n').map(s=>s.trim()).filter(Boolean); }
+  if(idx>=0){
+    const f = fields[idx];
+    f.label=label; if(!f.locked){ f.type=type; } f.required=required; if(type==='dropdown') f.options=options; else delete f.options;
+  } else {
+    fields.push({id:'c_'+Date.now().toString(36), label, type, required, options: type==='dropdown'?options:undefined});
+  }
+  saveForm(which, fields);
+  toast('Question saved \u2713');
+  openFormBuilder(which);
+}
+function delFormField(which, idx){
+  const fields = getForm(which);
+  if(fields[idx] && fields[idx].locked){ toast('Core field cannot be removed'); return; }
+  if(!confirm('Remove this question?')) return;
+  fields.splice(idx,1);
+  saveForm(which, fields);
+  openFormBuilder(which);
+}
+
+/* ---- Permissions ---- */
+const PERM_SECTIONS = ['dashboard','enquiries','pipeline','quotations','orders','dispatch','customers','products','admin'];
+const PERM_ACTIONS = ['view','create','edit','delete'];
+function getPerms(){ return store.get('permissions', null) || {}; }
+function savePerms(p){ store.set('permissions', p); try{ CLOUD.pushObj('permissions', p); }catch(e){} }
+function defaultPermFor(role){
+  const all = {}; PERM_SECTIONS.forEach(s=>{ all[s]={}; PERM_ACTIONS.forEach(a=>all[s][a]=true); });
+  if(role==='Sales Executive'){
+    all.admin={view:false,create:false,edit:false,delete:false};
+    ['customers','products'].forEach(s=>{ all[s].create=false; all[s].edit=false; all[s].delete=false; });
+    PERM_SECTIONS.forEach(s=>{ all[s].delete=false; });
+  } else if(role==='Sales Manager'){
+    all.admin={view:false,create:false,edit:false,delete:false};
+  }
+  return all;
+}
+function openPermsModal(email){
+  const users = DB_users();
+  const u = users.find(x=>x.email===email);
+  if(!u){ toast('User not found'); return; }
+  const perms = getPerms();
+  const cur = perms[email] || defaultPermFor(u.role);
+  let rows = PERM_SECTIONS.map(s=>{
+    const cells = PERM_ACTIONS.map(a=>{
+      const on = cur[s] && cur[s][a];
+      return '<td style="text-align:center"><input type="checkbox" data-s="'+s+'" data-a="'+a+'" '+(on?'checked':'')+'></td>';
+    }).join('');
+    return '<tr><td style="text-transform:capitalize"><b>'+s+'</b></td>'+cells+'</tr>';
+  }).join('');
+  openModal('<div class="modal-head"><h3>Permissions \u2014 '+u.name+'</h3><button class="icon-btn" onclick="setView(\'admin\');closeModal()">\u2715</button></div>'+
+    '<div class="modal-body">'+
+    '<p style="color:var(--text-2);font-size:13px;margin-bottom:10px">Role: <b>'+u.role+'</b> \u00b7 '+u.email+'. Set exactly what this user can do in each section.</p>'+
+    '<div style="overflow-x:auto"><table><thead><tr><th>Section</th><th style="text-align:center">View</th><th style="text-align:center">Create</th><th style="text-align:center">Edit</th><th style="text-align:center">Delete</th></tr></thead>'+
+    '<tbody id="perm-body">'+rows+'</tbody></table></div>'+
+    '<div style="margin-top:10px;display:flex;gap:8px"><button class="btn sm" onclick="permBulk(true)">Select all</button><button class="btn sm" onclick="permBulk(false)">Clear all</button></div>'+
+    '</div>'+
+    '<div class="modal-foot"><button class="btn" onclick="setView(\'admin\');closeModal()">Cancel</button><button class="btn primary" onclick="savePermsFor(\''+email+'\')">'+I.check+'Save Permissions</button></div>');
+}
+function permBulk(val){ document.querySelectorAll('#perm-body input[type=checkbox]').forEach(c=>c.checked=val); }
+function savePermsFor(email){
+  const perms = getPerms();
+  const p = {}; PERM_SECTIONS.forEach(s=>{ p[s]={}; PERM_ACTIONS.forEach(a=>p[s][a]=false); });
+  document.querySelectorAll('#perm-body input[type=checkbox]').forEach(c=>{ p[c.dataset.s][c.dataset.a]=c.checked; });
+  perms[email]=p;
+  savePerms(perms);
+  toast('Permissions saved \u2713'); setView('admin'); closeModal();
+}
+
 function exportData(){
   const data={enquiries:DB.enquiries(),quotations:DB.quotations(),orders:DB.orders(),dispatch:DB.dispatch(),customers:DB.customers(),products:DB.products()};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='oakcraft-crm-data.json';a.click();
   toast('Data exported ✓');
 }
-function resetDemo(){ if(!confirm('Reset all data to demo seed?'))return; ['enquiries','quotations','orders','dispatch','customers','products','crm_seeded'].forEach(k=>{try{localStorage.removeItem(k)}catch(e){delete mem[k]}}); seed(); toast('Demo data restored ✓'); setView(state.view); }
+function resetDemo(){
+  if(!confirm('Permanently clear ALL CRM data from this browser AND your Google Sheet? This cannot be undone.')) return;
+  const keys=['enquiries','quotations','orders','dispatch','customers','products'];
+  keys.forEach(k=>{ try{localStorage.removeItem(k)}catch(e){delete mem[k]} });
+  // clear each collection in the Sheet
+  (async()=>{
+    try{
+      for(const k of keys){
+        const r = await fetch(CLOUD.url+'?action=list&collection='+k,{redirect:'follow'});
+        const j = await r.json();
+        for(const rec of (j.data||[])){
+          await fetch(CLOUD.url,{method:'POST',redirect:'follow',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'delete',collection:k,id:rec.id})});
+        }
+      }
+      toast('All data cleared ✓');
+    }catch(e){ toast('Local cleared; cloud clear failed'); }
+    setView('dashboard');
+  })();
+}
 
 /* ============================================================
    EXCEL EXPORT  (SheetJS)
