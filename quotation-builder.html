@@ -1112,7 +1112,7 @@ window.addEventListener('focus', ()=>{
 <script>
 (function(){
   /* ⬇️ PASTE YOUR APPS SCRIPT WEB APP URL HERE (ends with /exec) */
-  const GAS_URL = 'https://script.google.com/macros/s/AKfycbzIayCjJeyzojqJbZLijTo_cPy6YywZETtyuD3uaIZnw4fU7WwiPWKmgP81M8JeM0Dkvg/exec';
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbwYDLF2Mh8SCuMTLJTesuIunJ03tuAYFW7x2etsaKUJT3Dua29IsFzU-4E5eiDAX6o1/exec';
 
   const configured = GAS_URL.indexOf('XXXX') === -1;
 
@@ -1129,12 +1129,14 @@ window.addEventListener('focus', ()=>{
 
   window.storage = {
     async get(key, shared){
-      const r = await gas('storageGet', { key: key });
-      if(!r.found) throw new Error('Key not found: ' + key);
-      return { key: key, value: r.value, shared: !!shared };
+      // translate to CRM backend: peekQuoteNo returns next-available number
+      const r = await gas('peekQuoteNo', { fy: (typeof FY!=='undefined'?FY:'') });
+      const next = (r && r.no) ? r.no : 1001;
+      return { key: key, value: JSON.stringify(next - 1), shared: !!shared };
     },
     async set(key, value, shared){
-      await gas('storageSet', { key: key, value: value });
+      // reserve the number for real (nextQuoteNo increments the counter)
+      await gas('nextQuoteNo', { fy: (typeof FY!=='undefined'?FY:'') });
       return { key: key, value: value, shared: !!shared };
     }
   };
@@ -1196,8 +1198,28 @@ window.addEventListener('focus', ()=>{
     }
     try{
       setStatus('Saving ' + fmtQno() + ' to Google Sheets…', true);
-      const r = await gas('saveQuotation', { quotation: buildPayload() });
-      setStatus('✓ ' + r.saved + ' saved to Google Sheets (' + r.items + ' item' + (r.items === 1 ? '' : 's') + ').', true);
+      const P = buildPayload();
+      // primary product name (first line item) + total qty
+      const firstItem = (P.items && P.items[0]) ? P.items[0].name : '';
+      const totalQty = (P.items||[]).reduce(function(a,it){ return a + (Number(it.qty)||0); }, 0) || 1;
+      const avgDisc = (P.items && P.items.length) ? Math.round((P.items.reduce(function(a,it){return a+(Number(it.disc)||0);},0) / P.items.length)) : 0;
+      // record shaped exactly how the CRM Quotations tab reads it
+      const crmRec = {
+        id: P.qnoFormatted,
+        date: P.date,
+        customer: P.co || P.attn || '—',
+        product: firstItem + ((P.items && P.items.length>1) ? (' +' + (P.items.length-1) + ' more') : ''),
+        qty: totalQty,
+        amount: Number(P.grand)||0,
+        discount: avgDisc,
+        validTill: P.valid || '',
+        salesperson: P.rep || '',
+        status: 'Sent',
+        source: 'Quotation Builder',
+        items: P.items
+      };
+      const r = await gas('save', { collection: 'quotations', record: { id: crmRec.id, data: crmRec } });
+      setStatus('✓ ' + crmRec.id + ' saved to your CRM Quotations tab.', true);
     }catch(err){
       console.error('Sheets save failed:', err);
       setStatus('Could not save to Google Sheets: ' + err.message + ' — the PDF itself downloaded fine.', false);
