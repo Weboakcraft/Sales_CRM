@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OakCraft Sales CRM — Enquiry to Dispatch</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f9f9f7; --surface:#ffffff; --surface-2:#fcfcfb; --sidebar:#0f1729; --sidebar-2:#1a2540;
+  --text:#0b0b0b; --text-2:#52514e; --muted:#898781; --grid:#e1e0d9; --border:rgba(11,11,11,.10);
+  --brand:#2a78d6; --brand-2:#1c5cab;
+  --s1:#2a78d6; --s2:#008300; --s3:#e87ba4; --s4:#eda100; --s5:#1baf7a; --s6:#eb6834; --s7:#4a3aa7; --s8:#e34948;
+  --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --crit:#d03b3b;
+  --good-ink:#006300;
+  --radius:14px; --shadow:0 1px 2px rgba(11,11,11,.04),0 4px 16px rgba(11,11,11,.05);
+  --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0d0d0d; --surface:#1a1a19; --surface-2:#1f1f1e; --sidebar:#08080c; --sidebar-2:#14141c;
+  --text:#ffffff; --text-2:#c3c2b7; --muted:#898781; --grid:#2c2c2a; --border:rgba(255,255,255,.10);
+  --brand:#3987e5; --brand-2:#256abf;
+  --s1:#3987e5; --s2:#008300; --s3:#d55181; --s4:#c98500; --s5:#199e70; --s6:#d95926; --s7:#9085e9; --s8:#e66767;
+  --good:#0ca30c; --good-ink:#0ca30c;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select,textarea{font-family:inherit;font-size:14px}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:var(--grid);border-radius:6px}
+
+.app{display:grid;grid-template-columns:248px 1fr;min-height:100vh}
+
+/* Sidebar */
+.sidebar{background:var(--sidebar);color:#cdd5e6;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:11px;padding:20px 20px 18px}
+.brand .logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#2a78d6,#4a3aa7);display:grid;place-items:center;font-weight:800;color:#fff;font-size:18px;flex-shrink:0}
+.brand h1{font-size:16px;color:#fff;font-weight:700;letter-spacing:-.2px}
+.brand span{font-size:11px;color:#7b88a8;display:block;font-weight:500}
+.nav{padding:8px 12px;flex:1;overflow-y:auto}
+.nav-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:#5d6a8a;padding:14px 12px 6px;font-weight:700}
+.nav a{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:9px;color:#aeb8d0;font-weight:500;font-size:13.5px;margin-bottom:2px;transition:.12s;position:relative}
+.nav a svg{width:18px;height:18px;flex-shrink:0;stroke-width:2}
+.nav a:hover{background:var(--sidebar-2);color:#fff}
+.nav a.active{background:linear-gradient(90deg,rgba(42,120,214,.22),rgba(42,120,214,.06));color:#fff}
+.nav a.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--brand)}
+.nav a .badge{margin-left:auto;background:var(--brand);color:#fff;font-size:11px;padding:1px 7px;border-radius:10px;font-weight:700}
+.sidebar-foot{padding:14px 18px;border-top:1px solid rgba(255,255,255,.07);display:flex;align-items:center;gap:10px}
+.avatar{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#1baf7a,#008300);display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px}
+.sidebar-foot .info{font-size:12.5px;color:#dfe4ee;font-weight:600}
+.sidebar-foot .info small{display:block;color:#7b88a8;font-weight:500;font-size:11px}
+
+/* Main */
+.main{display:flex;flex-direction:column;min-width:0}
+.topbar{height:64px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:16px;padding:0 26px;position:sticky;top:0;z-index:20}
+.topbar .page-title{font-size:19px;font-weight:700;letter-spacing:-.3px}
+.topbar .page-title small{display:block;font-size:12px;color:var(--muted);font-weight:500;letter-spacing:0}
+.search{margin-left:auto;position:relative}
+.search input{width:260px;padding:9px 12px 9px 36px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);color:var(--text)}
+.search svg{position:absolute;left:11px;top:10px;width:16px;height:16px;color:var(--muted)}
+.icon-btn{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;color:var(--text-2);border:1px solid var(--border);background:var(--surface-2)}
+.icon-btn:hover{background:var(--bg)}
+.content{padding:24px 26px 40px;overflow-y:auto}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 15px;border-radius:10px;font-weight:600;font-size:13.5px;border:1px solid var(--border);background:var(--surface);color:var(--text);transition:.12s}
+.btn:hover{background:var(--bg)}
+.btn.primary{background:var(--brand);color:#fff;border-color:transparent}
+.btn.primary:hover{background:var(--brand-2)}
+.btn svg{width:16px;height:16px}
+.btn.sm{padding:6px 11px;font-size:12.5px}
+
+/* KPI cards */
+.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:20px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow)}
+.kpi .k-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.kpi .k-ico{width:36px;height:36px;border-radius:10px;display:grid;place-items:center}
+.kpi .k-ico svg{width:19px;height:19px}
+.kpi .val{font-size:26px;font-weight:750;letter-spacing:-.6px}
+.kpi .lbl{font-size:12.5px;color:var(--text-2);font-weight:500;margin-top:2px}
+.kpi .delta{font-size:12px;font-weight:700;margin-top:9px;display:inline-flex;align-items:center;gap:3px}
+.delta.up{color:var(--good-ink)} .delta.down{color:var(--crit)}
+
+/* Panels / grid */
+.grid-2{display:grid;grid-template-columns:1.6fr 1fr;gap:16px;margin-bottom:16px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow)}
+.panel h3{font-size:15px;font-weight:700;letter-spacing:-.2px;display:flex;align-items:center;justify-content:space-between}
+.panel h3 small{font-size:12px;color:var(--muted);font-weight:500}
+.panel .chart-wrap{position:relative;height:260px;margin-top:14px}
+.panel .chart-sm{height:220px}
+
+/* Funnel */
+.funnel{margin-top:16px;display:flex;flex-direction:column;gap:9px}
+.funnel-row{display:flex;align-items:center;gap:12px}
+.funnel-row .fl{width:96px;font-size:12.5px;color:var(--text-2);font-weight:600}
+.funnel-bar{flex:1;height:34px;border-radius:8px;display:flex;align-items:center;padding:0 12px;color:#fff;font-weight:700;font-size:13px;min-width:60px}
+.funnel-row .pct{width:44px;text-align:right;font-size:12.5px;color:var(--muted);font-weight:600}
+
+/* Table */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.card-head{padding:16px 20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.card-head h3{font-size:16px;font-weight:700}
+.card-head .tools{margin-left:auto;display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.field{padding:8px 11px;border-radius:9px;border:1px solid var(--border);background:var(--surface-2);color:var(--text)}
+table{width:100%;border-collapse:collapse}
+thead th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;padding:11px 20px;background:var(--surface-2);border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:13px 20px;border-bottom:1px solid var(--border);font-size:13.5px;vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--surface-2)}
+td .strong{font-weight:650}
+td .sub{color:var(--muted);font-size:12px}
+.tabular{font-variant-numeric:tabular-nums}
+
+/* Badges */
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:700;white-space:nowrap}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.c-new{color:#256abf;background:rgba(42,120,214,.12)}
+.c-prog{color:#b06a00;background:rgba(237,161,0,.14)}
+.c-won,.c-good{color:var(--good-ink);background:rgba(12,163,12,.13)}
+.c-lost,.c-bad{color:var(--crit);background:rgba(208,59,59,.12)}
+.c-quo{color:#7a2fa8;background:rgba(74,58,167,.13)}
+.c-ship{color:#0b7a92;background:rgba(27,175,122,.14)}
+.c-neutral{color:var(--text-2);background:rgba(137,135,129,.16)}
+.prio{font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px}
+.p-high{color:var(--crit);background:rgba(208,59,59,.1)}
+.p-med{color:#b06a00;background:rgba(237,161,0,.13)}
+.p-low{color:var(--text-2);background:rgba(137,135,129,.14)}
+
+.avatar-sm{width:30px;height:30px;border-radius:8px;display:inline-grid;place-items:center;color:#fff;font-weight:700;font-size:12px;flex-shrink:0}
+.cell-user{display:flex;align-items:center;gap:10px}
+
+.row-actions button{width:30px;height:30px;border-radius:8px;color:var(--muted);border:1px solid transparent}
+.row-actions button:hover{background:var(--bg);color:var(--brand);border-color:var(--border)}
+.row-actions svg{width:15px;height:15px}
+
+.pipeline{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;overflow-x:auto}
+.stage-col{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:12px;min-width:180px}
+.stage-col h4{font-size:12.5px;font-weight:700;display:flex;justify-content:space-between;margin-bottom:10px;color:var(--text-2)}
+.stage-col h4 span{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:0 8px;font-size:11px}
+.lead-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:11px;margin-bottom:9px;box-shadow:var(--shadow)}
+.lead-card .lc-name{font-weight:650;font-size:13px}
+.lead-card .lc-meta{font-size:11.5px;color:var(--muted);margin-top:3px}
+.lead-card .lc-val{font-weight:700;font-size:13px;margin-top:7px;color:var(--brand)}
+
+/* Modal */
+.modal-bg{position:fixed;inset:0;background:rgba(8,8,12,.55);backdrop-filter:blur(3px);display:none;place-items:center;z-index:100;padding:20px}
+.modal-bg.show{display:grid}
+.modal{background:var(--surface);border-radius:16px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.modal-head{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-head h3{font-size:17px;font-weight:700}
+.modal-body{padding:20px 24px}
+.modal-foot{padding:16px 24px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end}
+.form-row{margin-bottom:14px}
+.form-row.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-row label{display:block;font-size:12.5px;font-weight:600;color:var(--text-2);margin-bottom:6px}
+.form-row input,.form-row select,.form-row textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);color:var(--text)}
+.form-row input:focus,.form-row select:focus{outline:2px solid var(--brand);border-color:transparent}
+
+.toast{position:fixed;bottom:24px;right:24px;background:var(--text);color:var(--bg);padding:13px 20px;border-radius:12px;font-weight:600;font-size:13.5px;box-shadow:0 10px 30px rgba(0,0,0,.3);transform:translateY(120px);transition:.3s;z-index:200}
+.toast.show{transform:translateY(0)}
+
+.section-title{font-size:14px;font-weight:700;margin:22px 0 12px;color:var(--text-2)}
+.hidden{display:none!important}
+.empty{padding:50px;text-align:center;color:var(--muted)}
+@media(max-width:1100px){.kpi-grid{grid-template-columns:repeat(2,1fr)}.grid-2,.grid-3{grid-template-columns:1fr}.pipeline{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:760px){.app{grid-template-columns:1fr}.sidebar{display:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">O</div>
+      <div><h1>OakCraft CRM</h1><span>Sales Pipeline Suite</span></div>
+    </div>
+    <nav class="nav" id="nav">
+      <div class="nav-label">Overview</div>
+      <a data-view="dashboard" data-icon="dash" class="active"><span>Dashboard</span></a>
+      <div class="nav-label">Sales Pipeline</div>
+      <a data-view="enquiries" data-icon="inbox"><span>Enquiries / Leads</span><span class="badge" id="nb-enq">0</span></a>
+      <a data-view="pipeline" data-icon="flow"><span>Pipeline Board</span></a>
+      <a data-view="quotations" data-icon="doc"><span>Quotations</span></a>
+      <a data-view="orders" data-icon="cart"><span>Orders</span><span class="badge" id="nb-ord">0</span></a>
+      <a data-view="dispatch" data-icon="truck"><span>Dispatch</span><span class="badge" id="nb-dis">0</span></a>
+      <div class="nav-label">Masters</div>
+      <a data-view="customers" data-icon="users"><span>Customers</span></a>
+      <a data-view="products" data-icon="box"><span>Products</span></a>
+      <div class="nav-label">System</div>
+      <a data-view="admin" data-icon="gear"><span>Admin Panel</span></a>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="avatar">AG</div>
+      <div class="info">Ankush Goswami<small>Admin · OakCraft</small></div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <header class="topbar">
+      <div class="page-title" id="pageTitle">Dashboard<small id="pageSub">Sales performance overview</small></div>
+      <div class="search" id="searchBox"><input id="globalSearch" placeholder="Search customers, orders…"></div>
+      <button class="icon-btn" id="themeBtn" title="Toggle theme"></button>
+      <button class="btn primary" id="quickAdd">New Enquiry</button>
+    </header>
+    <div class="content" id="content"></div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= ICONS ================= */
+const I = {
+  dash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
+  inbox:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.5 2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.5-6.5A2 2 0 0016.7 4H7.3a2 2 0 00-1.8 1.5z"/></svg>',
+  flow:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="4" width="6" height="6" rx="1"/><rect x="16" y="4" width="6" height="6" rx="1"/><rect x="9" y="14" width="6" height="6" rx="1"/><path d="M5 10v2a2 2 0 002 2h5M19 10v2a2 2 0 01-2 2h-5"/></svg>',
+  doc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6M9 9h1"/></svg>',
+  cart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="21" r="1.5"/><circle cx="19" cy="21" r="1.5"/><path d="M2 2h3l2.6 12.4a2 2 0 002 1.6h8.7a2 2 0 002-1.6L23 6H6"/></svg>',
+  truck:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="1" y="6" width="13" height="10" rx="1.5"/><path d="M14 9h4l3 3v4h-7z"/><circle cx="6" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/></svg>',
+  users:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 00-3-3.8"/><path d="M16 3.1a4 4 0 010 7.7"/></svg>',
+  box:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 8v8a2 2 0 01-1 1.7l-7 4a2 2 0 01-2 0l-7-4A2 2 0 013 16V8a2 2 0 011-1.7l7-4a2 2 0 012 0l7 4A2 2 0 0121 8z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/></svg>',
+  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-2.7 1.1V21a2 2 0 11-4 0v-.1A1.6 1.6 0 006 19.4l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.6 1.6 0 00-1.1-2.7H2a2 2 0 110-4h.1A1.6 1.6 0 003.6 6l-.1-.1a2 2 0 112.8-2.8l.1.1a1.6 1.6 0 001.8.3H8a1.6 1.6 0 001-1.5V2a2 2 0 114 0v.1a1.6 1.6 0 001 1.5 1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 00-.3 1.8V8a1.6 1.6 0 001.5 1H22a2 2 0 110 4h-.1a1.6 1.6 0 00-1.5 1z"/></svg>',
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
+  moon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>',
+  sun:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="4.5"/><path d="M12 1v3M12 20v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M1 12h3M20 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>',
+  edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4z"/></svg>',
+  trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m2 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/></svg>',
+  arrow:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  money:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>',
+  up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m6 15 6-6 6 6"/></svg>',
+  down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m6 9 6 6 6-6"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6 9 17l-5-5"/></svg>',
+};
+</script>
+<script>
+/* ============================================================
+   OakCraft Sales CRM — front-end logic (demo build)
+   Enquiry → Quotation → Order → Dispatch  +  Dashboard
+   Data persists to localStorage (falls back to memory).
+   ============================================================ */
+
+/* ---------- storage helpers ---------- */
+const store = {
+  get(k, def){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):def; }catch(e){ return mem[k]??def; } },
+  set(k, val){ try{ localStorage.setItem(k, JSON.stringify(val)); }catch(e){ mem[k]=val; } }
+};
+const mem = {};
+const money = n => '₹' + Number(n||0).toLocaleString('en-IN');
+const short = n => n>=1e7 ? '₹'+(n/1e7).toFixed(2)+'Cr' : n>=1e5 ? '₹'+(n/1e5).toFixed(2)+'L' : n>=1e3 ? '₹'+(n/1e3).toFixed(1)+'K' : '₹'+n;
+const uid = p => p + Date.now().toString(36).slice(-4).toUpperCase() + Math.floor(Math.random()*90+10);
+const today = () => new Date().toISOString().slice(0,10);
+const initials = s => (s||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+const avColors = ['#2a78d6','#008300','#e87ba4','#eda100','#1baf7a','#eb6834','#4a3aa7','#e34948'];
+const avColor = s => avColors[(s||'').length % avColors.length];
+
+/* ---------- seed data ---------- */
+const SALES = ['Rahul Verma','Priya Nair','Amit Shah','Sneha Rao','Kabir Khan'];
+const SOURCES = ['IndiaMART','JustDial','Website','Referral','Trade Show','Cold Call'];
+const CITIES = ['Mumbai','Delhi','Bengaluru','Pune','Ahmedabad','Chennai','Jaipur','Surat'];
+const CATS = ['Office Furniture','Modular Kitchen','Wardrobes','Seating','Storage','Custom Woodwork'];
+
+function seed(){
+  if(store.get('crm_seeded')) return;
+  const companies = ['Techno Interiors','Skyline Builders','Green Valley Homes','Urban Nest','Prime Realty','Anand Constructions','Lotus Furnishings','Elite Spaces','Nova Developers','Grand Living','Craft & Co','Vertex Interiors','Maple Homes','Zenith Projects','Orchid Estates','Silverline Decor','Cosmos Realty','Fusion Interiors','Metro Furnish','Harmony Homes'];
+  const products = [
+    {id:'PRD-1001',name:'Executive Office Desk',sku:'OFD-EX-140',cat:'Office Furniture',price:24500,stock:42,unit:'pc'},
+    {id:'PRD-1002',name:'Ergonomic Mesh Chair',sku:'SEAT-ERG-02',cat:'Seating',price:8900,stock:120,unit:'pc'},
+    {id:'PRD-1003',name:'Modular Kitchen (L-Shape)',sku:'MK-LS-STD',cat:'Modular Kitchen',price:185000,stock:8,unit:'set'},
+    {id:'PRD-1004',name:'2-Door Sliding Wardrobe',sku:'WR-SLD-2D',cat:'Wardrobes',price:46000,stock:15,unit:'pc'},
+    {id:'PRD-1005',name:'Conference Table 8-Seat',sku:'OFD-CONF-8',cat:'Office Furniture',price:68000,stock:6,unit:'pc'},
+    {id:'PRD-1006',name:'Steel Storage Cabinet',sku:'STG-STL-4S',cat:'Storage',price:12800,stock:60,unit:'pc'},
+    {id:'PRD-1007',name:'Reception Sofa (3-Seater)',sku:'SEAT-SOFA-3',cat:'Seating',price:34500,stock:22,unit:'pc'},
+    {id:'PRD-1008',name:'Custom TV Unit',sku:'CW-TV-CUST',cat:'Custom Woodwork',price:29000,stock:0,unit:'pc'},
+    {id:'PRD-1009',name:'Bookshelf Wall Unit',sku:'STG-BShelf-W',cat:'Storage',price:18500,stock:33,unit:'pc'},
+    {id:'PRD-1010',name:'Modular Kitchen (U-Shape)',sku:'MK-US-PREM',cat:'Modular Kitchen',price:265000,stock:4,unit:'set'},
+  ];
+  const customers = companies.map((c,i)=>({
+    id:'CUST-'+(2001+i), name:c, contact:['Rohan','Anita','Vikas','Meera','Suresh','Deepa','Arjun','Kavya','Nikhil','Pooja'][i%10]+' '+['Gupta','Sharma','Reddy','Iyer','Patel','Singh','Menon','Das','Joshi','Bose'][i%10],
+    email:'purchase@'+c.toLowerCase().replace(/[^a-z]/g,'')+'.com', phone:'+91 '+(70000+Math.floor(Math.random()*29999))+' '+(10000+Math.floor(Math.random()*89999)),
+    city:CITIES[i%CITIES.length], type:i%4===0?'Enterprise':i%3===0?'SMB':'Retail', since:2021+(i%4)
+  }));
+
+  const stages=['New','Contacted','Qualified','Quoted','Won','Lost'];
+  const prios=['High','Medium','Low'];
+  const enquiries=[];
+  for(let i=0;i<48;i++){
+    const cust=customers[Math.floor(Math.random()*customers.length)];
+    const prod=products[Math.floor(Math.random()*products.length)];
+    const qty=Math.floor(Math.random()*8)+1;
+    const d=new Date(); d.setDate(d.getDate()-Math.floor(Math.random()*75));
+    const stage=stages[Math.floor(Math.random()* (i<6?4:6))];
+    enquiries.push({
+      id:uidSeq('ENQ',i), date:d.toISOString().slice(0,10), customer:cust.name, custId:cust.id,
+      product:prod.name, prodId:prod.id, qty, source:SOURCES[Math.floor(Math.random()*SOURCES.length)],
+      salesperson:SALES[Math.floor(Math.random()*SALES.length)], stage,
+      value:prod.price*qty, priority:prios[Math.floor(Math.random()*prios.length)],
+      note:'Requirement for '+prod.cat.toLowerCase()+', site visit '+(Math.random()>.5?'requested':'done')+'.'
+    });
+  }
+  // quotations from quoted/won
+  const quotations=[]; const orders=[]; const dispatch=[];
+  enquiries.filter(e=>['Quoted','Won'].includes(e.stage)).forEach((e,i)=>{
+    const disc=[0,5,8,10][i%4];
+    const amt=Math.round(e.value*(1-disc/100));
+    const q={id:uidSeq('QT',i), enqId:e.id, customer:e.customer, custId:e.custId, product:e.product, qty:e.qty,
+      amount:amt, discount:disc, date:e.date, validTill:addDays(e.date,15), salesperson:e.salesperson,
+      status:e.stage==='Won'?'Accepted':['Sent','Draft','Sent'][i%3]};
+    quotations.push(q);
+    if(q.status==='Accepted'){
+      const ostat=['Confirmed','In Production','Ready','Dispatched','Delivered'][i% 5];
+      const o={id:uidSeq('ORD',i), quoteId:q.id, customer:q.customer, custId:q.custId, product:q.product, qty:q.qty,
+        amount:q.amount, date:addDays(q.date,2), status:ostat, salesperson:q.salesperson,
+        payment:['Paid','Partial','Pending'][i%3], expDispatch:addDays(q.date,10)};
+      orders.push(o);
+      if(['Dispatched','Delivered'].includes(ostat)){
+        dispatch.push({id:uidSeq('DSP',i), orderId:o.id, customer:o.customer, product:o.product, qty:o.qty,
+          courier:['BlueDart','Delhivery','VRL Logistics','Gati','Self Fleet'][i%5],
+          tracking:'TRK'+Math.floor(Math.random()*9000000+1000000), status:ostat==='Delivered'?'Delivered':['Packed','Shipped','Out for Delivery'][i%3],
+          dispatchedOn:addDays(o.date,3), eta:addDays(o.date,7)});
+      }
+    }
+  });
+
+  store.set('products',products); store.set('customers',customers);
+  store.set('enquiries',enquiries); store.set('quotations',quotations);
+  store.set('orders',orders); store.set('dispatch',dispatch);
+  store.set('crm_seeded',true);
+}
+let seqBase=Date.now();
+function uidSeq(p,i){ return p+'-'+String(1000+i); }
+function addDays(dstr,n){ const d=new Date(dstr); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+
+/* ---------- data access ---------- */
+const DB = {
+  enquiries:()=>store.get('enquiries',[]),
+  quotations:()=>store.get('quotations',[]),
+  orders:()=>store.get('orders',[]),
+  dispatch:()=>store.get('dispatch',[]),
+  customers:()=>store.get('customers',[]),
+  products:()=>store.get('products',[]),
+  save:(k,v)=>store.set(k,v),
+};
+
+/* ============================================================
+   RENDER ENGINE
+   ============================================================ */
+const content = document.getElementById('content');
+const state = { view:'dashboard', charts:{} };
+
+const PAGE_META = {
+  dashboard:['Dashboard','Sales performance overview'],
+  enquiries:['Enquiries / Leads','Capture & qualify incoming demand'],
+  pipeline:['Pipeline Board','Drag your deals through stages'],
+  quotations:['Quotations','Proposals sent to customers'],
+  orders:['Orders','Confirmed orders in production'],
+  dispatch:['Dispatch & Delivery','Track shipments to customers'],
+  customers:['Customers','Your account master list'],
+  products:['Products','Catalog & inventory'],
+  admin:['Admin Panel','Users, settings & configuration'],
+};
+
+function setView(v){
+  state.view=v;
+  document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('active',a.dataset.view===v));
+  const [t,s]=PAGE_META[v];
+  document.getElementById('pageTitle').childNodes[0].nodeValue=t;
+  document.getElementById('pageSub').textContent=s;
+  document.getElementById('searchBox').style.display = ['customers','products','enquiries','orders','quotations','dispatch'].includes(v)?'block':'none';
+  Object.values(state.charts).forEach(c=>{try{c.destroy()}catch(e){}}); state.charts={};
+  ({dashboard:renderDashboard,enquiries:renderEnquiries,pipeline:renderPipeline,quotations:renderQuotations,
+    orders:renderOrders,dispatch:renderDispatch,customers:renderCustomers,products:renderProducts,admin:renderAdmin}[v])();
+  content.scrollTop=0;
+}
+
+/* ---------- Dashboard ---------- */
+function renderDashboard(){
+  const enq=DB.enquiries(), quo=DB.quotations(), ord=DB.orders(), dis=DB.dispatch();
+  const totalEnq=enq.length;
+  const won=enq.filter(e=>e.stage==='Won').length;
+  const conv=totalEnq? Math.round(won/totalEnq*100):0;
+  const openOrders=ord.filter(o=>!['Delivered','Cancelled'].includes(o.status)).length;
+  const revenue=ord.filter(o=>o.status!=='Cancelled').reduce((s,o)=>s+o.amount,0);
+  const pendingDis=ord.filter(o=>o.status==='Ready'||o.status==='Confirmed'||o.status==='In Production').length;
+  const pipelineVal=enq.filter(e=>!['Won','Lost'].includes(e.stage)).reduce((s,e)=>s+e.value,0);
+
+  const kpi=(ico,iconBg,iconcol,val,lbl,delta,dir)=>`
+    <div class="kpi">
+      <div class="k-top"><div class="k-ico" style="background:${iconBg};color:${iconcol=iconcol}">${I[ico]}</div>
+      ${delta?`<span class="delta ${dir}">${dir==='up'?I.up:I.down}${delta}</span>`:''}</div>
+      <div class="val tabular">${val}</div><div class="lbl">${lbl}</div>
+    </div>`;
+  let iconcol;
+  content.innerHTML=`
+    <div class="kpi-grid">
+      ${dcard('inbox','rgba(42,120,214,.12)','#2a78d6',totalEnq,'Total Enquiries','+12%','up')}
+      ${dcard('flow','rgba(27,175,122,.14)','#1baf7a',conv+'%','Conversion Rate','+4.2%','up')}
+      ${dcard('cart','rgba(237,161,0,.14)','#b06a00',openOrders,'Open Orders','+3','up')}
+      ${dcard('money','rgba(12,163,12,.13)','#0ca30c',short(revenue),'Revenue (Delivered+)','+18%','up')}
+      ${dcard('truck','rgba(208,59,59,.12)','#d03b3b',pendingDis,'Pending Dispatch','-2','down')}
+    </div>
+
+    <div class="grid-2">
+      <div class="panel"><h3>Revenue Trend <small>Last 6 months (₹ Lakh)</small></h3><div class="chart-wrap"><canvas id="ch-rev"></canvas></div></div>
+      <div class="panel"><h3>Sales Funnel <small>Enquiry → Dispatch</small></h3><div id="funnel"></div></div>
+    </div>
+
+    <div class="grid-3">
+      <div class="panel"><h3>Order Status</h3><div class="chart-wrap chart-sm"><canvas id="ch-status"></canvas></div></div>
+      <div class="panel"><h3>Enquiry Sources</h3><div class="chart-wrap chart-sm"><canvas id="ch-src"></canvas></div></div>
+      <div class="panel"><h3>Sales by Person <small>Won value</small></h3><div class="chart-wrap chart-sm"><canvas id="ch-sales"></canvas></div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>Recent Orders</h3><div class="tools"><button class="btn sm" onclick="setView('orders')">View all ${I.arrow}</button></div></div>
+      <div style="overflow-x:auto"><table><thead><tr><th>Order</th><th>Customer</th><th>Product</th><th>Amount</th><th>Payment</th><th>Status</th></tr></thead>
+      <tbody>${ord.slice(-6).reverse().map(o=>`<tr>
+        <td class="strong tabular">${o.id}</td>
+        <td>${userCell(o.customer)}</td>
+        <td>${o.product} <span class="sub">×${o.qty}</span></td>
+        <td class="strong tabular">${money(o.amount)}</td>
+        <td>${payChip(o.payment)}</td>
+        <td>${orderChip(o.status)}</td></tr>`).join('')}</tbody></table></div>
+    </div>`;
+
+  // charts (guarded — funnel is pure HTML so always renders)
+  drawFunnel(enq,quo,ord,dis);
+  if(typeof Chart!=='undefined'){ try{ drawRevenue(); drawStatus(ord); drawSources(enq); drawSalesBy(enq); }catch(err){ console.warn('chart error',err); } }
+  else { document.querySelectorAll('.chart-wrap').forEach(c=>{ if(!c.querySelector('.funnel')) c.innerHTML='<div class="empty" style="padding:30px">Charts load when online (Chart.js CDN)</div>'; }); }
+}
+function dcard(ico,bg,col,val,lbl,delta,dir){
+  return `<div class="kpi"><div class="k-top"><div class="k-ico" style="background:${bg};color:${col}">${I[ico]}</div>
+    <span class="delta ${dir}">${dir==='up'?I.up:I.down}${delta}</span></div>
+    <div class="val tabular">${val}</div><div class="lbl">${lbl}</div></div>`;
+}
+
+function chartFont(){ const dark=isDark(); return {color:dark?'#c3c2b7':'#52514e'}; }
+function isDark(){ return document.documentElement.getAttribute('data-theme')==='dark'; }
+function gridColor(){ return isDark()?'#2c2c2a':'#e1e0d9'; }
+
+function drawRevenue(){
+  const ctx=document.getElementById('ch-rev'); if(!ctx)return;
+  const months=['Feb','Mar','Apr','May','Jun','Jul'];
+  const data=[38,44,41,58,63,72], target=[40,45,50,55,60,68];
+  state.charts.rev=new Chart(ctx,{type:'line',data:{labels:months,datasets:[
+    {label:'Actual',data,borderColor:'#2a78d6',backgroundColor:ctx=>{const g=ctx.chart.ctx.createLinearGradient(0,0,0,240);g.addColorStop(0,'rgba(42,120,214,.25)');g.addColorStop(1,'rgba(42,120,214,0)');return g;},fill:true,tension:.35,borderWidth:2.5,pointRadius:4,pointBackgroundColor:'#2a78d6',pointBorderColor:'#fff',pointBorderWidth:2},
+    {label:'Target',data:target,borderColor:'#898781',borderDash:[5,5],borderWidth:1.8,pointRadius:0,tension:.35,fill:false}
+  ]},options:baseOpts({legend:true,yFmt:v=>'₹'+v+'L'})});
+}
+function drawFunnel(enq,quo,ord,dis){
+  const el=document.getElementById('funnel'); if(!el)return;
+  const stages=[
+    ['Enquiries',enq.length,'#2a78d6'],
+    ['Quotations',quo.length,'#4a3aa7'],
+    ['Orders',ord.length,'#eda100'],
+    ['Dispatched',dis.length,'#1baf7a'],
+    ['Delivered',dis.filter(d=>d.status==='Delivered').length,'#008300'],
+  ];
+  const max=stages[0][1]||1;
+  el.className='funnel';
+  el.innerHTML=stages.map((s,i)=>{
+    const w=Math.max(s[1]/max*100,8);
+    const pct=i===0?'100%':Math.round(s[1]/max*100)+'%';
+    return `<div class="funnel-row"><div class="fl">${s[0]}</div>
+      <div class="funnel-bar" style="width:${w}%;background:${s[2]}">${s[1]}</div>
+      <div class="pct">${pct}</div></div>`;
+  }).join('');
+}
+function drawStatus(ord){
+  const ctx=document.getElementById('ch-status'); if(!ctx)return;
+  const order=['Confirmed','In Production','Ready','Dispatched','Delivered'];
+  const cols=['#2a78d6','#eda100','#4a3aa7','#1baf7a','#008300'];
+  const counts=order.map(s=>ord.filter(o=>o.status===s).length);
+  state.charts.status=new Chart(ctx,{type:'doughnut',data:{labels:order,datasets:[{data:counts,backgroundColor:cols,borderColor:isDark()?'#1a1a19':'#fff',borderWidth:2}]},
+    options:{cutout:'62%',plugins:{legend:{position:'right',labels:{boxWidth:10,boxHeight:10,usePointStyle:true,padding:12,font:{size:12},color:chartFont().color}}},responsive:true,maintainAspectRatio:false}});
+}
+function drawSources(enq){
+  const ctx=document.getElementById('ch-src'); if(!ctx)return;
+  const counts=SOURCES.map(s=>enq.filter(e=>e.source===s).length);
+  state.charts.src=new Chart(ctx,{type:'bar',data:{labels:SOURCES,datasets:[{data:counts,backgroundColor:'#2a78d6',borderRadius:6,barThickness:18}]},
+    options:baseOpts({horizontal:true})});
+}
+function drawSalesBy(enq){
+  const ctx=document.getElementById('ch-sales'); if(!ctx)return;
+  const vals=SALES.map(s=>enq.filter(e=>e.salesperson===s&&e.stage==='Won').reduce((a,e)=>a+e.value,0));
+  state.charts.sales=new Chart(ctx,{type:'bar',data:{labels:SALES.map(s=>s.split(' ')[0]),datasets:[{data:vals,backgroundColor:'#1baf7a',borderRadius:6,barThickness:22}]},
+    options:baseOpts({yFmt:v=>short(v)})});
+}
+function baseOpts({legend=false,horizontal=false,yFmt=v=>v}={}){
+  const gc=gridColor(), fc=chartFont().color;
+  const catAxis={type:'category',grid:{display:false,drawBorder:false},border:{display:false},
+    ticks:{color:fc,font:{size:11.5},autoSkip:false,callback:function(val){return this.getLabelForValue(val);}}};
+  const valAxis={grid:{color:gc,drawBorder:false},border:{display:false},
+    ticks:{color:fc,font:{size:11.5},callback:yFmt}};
+  return {responsive:true,maintainAspectRatio:false,indexAxis:horizontal?'y':'x',
+    plugins:{legend:legend?{position:'top',align:'end',labels:{boxWidth:12,usePointStyle:true,padding:14,font:{size:12},color:fc}}:{display:false},
+      tooltip:{backgroundColor:isDark()?'#000':'#0b0b0b',padding:10,cornerRadius:8,titleFont:{size:12},bodyFont:{size:12.5}}},
+    scales: horizontal ? {x:valAxis,y:catAxis} : {x:catAxis,y:valAxis}};
+}
+
+/* ---------- shared cell renderers ---------- */
+function userCell(name){ return `<div class="cell-user"><div class="avatar-sm" style="background:${avColor(name)}">${initials(name)}</div><div><div class="strong">${name}</div></div></div>`; }
+function stageChip(s){const m={New:'c-new',Contacted:'c-prog',Qualified:'c-quo',Quoted:'c-quo',Won:'c-won',Lost:'c-lost'};return `<span class="chip ${m[s]||'c-neutral'}">${s}</span>`;}
+function orderChip(s){const m={Confirmed:'c-new','In Production':'c-prog',Ready:'c-quo',Dispatched:'c-ship',Delivered:'c-won',Cancelled:'c-lost'};return `<span class="chip ${m[s]||'c-neutral'}">${s}</span>`;}
+function quoChip(s){const m={Draft:'c-neutral',Sent:'c-new',Accepted:'c-won',Rejected:'c-lost'};return `<span class="chip ${m[s]||'c-neutral'}">${s}</span>`;}
+function disChip(s){const m={Pending:'c-neutral',Packed:'c-prog',Shipped:'c-new','Out for Delivery':'c-ship',Delivered:'c-won'};return `<span class="chip ${m[s]||'c-neutral'}">${s}</span>`;}
+function payChip(s){const m={Paid:'c-won',Partial:'c-prog',Pending:'c-lost'};return `<span class="chip ${m[s]||'c-neutral'}">${s}</span>`;}
+function prioTag(p){return `<span class="prio p-${(p||'').toLowerCase()}">${p}</span>`;}
+
+/* ---------- Enquiries ---------- */
+let enqFilter={q:'',stage:'',sales:''};
+function renderEnquiries(){
+  const list=DB.enquiries();
+  content.innerHTML=`
+    <div class="card">
+      <div class="card-head"><h3>Enquiries <span class="chip c-neutral" style="margin-left:4px">${list.length}</span></h3>
+        <div class="tools">
+          <select class="field" id="f-stage" onchange="enqFilter.stage=this.value;paintEnq()"><option value="">All Stages</option>${['New','Contacted','Qualified','Quoted','Won','Lost'].map(s=>`<option>${s}</option>`).join('')}</select>
+          <select class="field" id="f-sales" onchange="enqFilter.sales=this.value;paintEnq()"><option value="">All Salespersons</option>${SALES.map(s=>`<option>${s}</option>`).join('')}</select>
+          <button class="btn primary sm" onclick="openEnqModal()">${I.plus}Add Enquiry</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto"><table><thead><tr>
+        <th>Enquiry ID</th><th>Date</th><th>Customer</th><th>Product</th><th>Qty</th><th>Source</th><th>Salesperson</th><th>Value</th><th>Priority</th><th>Stage</th><th></th>
+      </tr></thead><tbody id="enq-body"></tbody></table></div>
+    </div>`;
+  paintEnq();
+}
+function paintEnq(){
+  const q=(document.getElementById('globalSearch').value||'').toLowerCase();
+  let rows=DB.enquiries().filter(e=>
+    (!enqFilter.stage||e.stage===enqFilter.stage)&&(!enqFilter.sales||e.salesperson===enqFilter.sales)&&
+    (!q||[e.id,e.customer,e.product].join(' ').toLowerCase().includes(q)));
+  rows=rows.sort((a,b)=>b.date.localeCompare(a.date));
+  const body=document.getElementById('enq-body'); if(!body)return;
+  body.innerHTML=rows.length?rows.map(e=>`<tr>
+    <td class="strong tabular">${e.id}</td><td class="sub tabular">${e.date}</td>
+    <td>${userCell(e.customer)}</td><td>${e.product}</td><td class="tabular">${e.qty}</td>
+    <td>${e.source}</td><td>${e.salesperson}</td><td class="strong tabular">${money(e.value)}</td>
+    <td>${prioTag(e.priority)}</td><td>${stageChip(e.stage)}</td>
+    <td><div class="row-actions" style="display:flex"><button onclick="openEnqModal('${e.id}')" title="Edit">${I.edit}</button><button onclick="delRow('enquiries','${e.id}')" title="Delete">${I.trash}</button></div></td>
+  </tr>`).join(''):`<tr><td colspan="11" class="empty">No enquiries match your filters.</td></tr>`;
+}
+
+/* ---------- Pipeline board ---------- */
+function renderPipeline(){
+  const stages=['New','Contacted','Qualified','Quoted','Won'];
+  const enq=DB.enquiries();
+  content.innerHTML=`<div class="pipeline">${stages.map(st=>{
+    const items=enq.filter(e=>e.stage===st);
+    const val=items.reduce((s,e)=>s+e.value,0);
+    return `<div class="stage-col"><h4>${st} <span>${items.length}</span></h4>
+      <div style="font-size:11.5px;color:var(--muted);margin:-4px 0 10px;font-weight:600">${short(val)}</div>
+      ${items.slice(0,12).map(e=>`<div class="lead-card">
+        <div class="lc-name">${e.customer}</div>
+        <div class="lc-meta">${e.product} · ${e.salesperson.split(' ')[0]}</div>
+        <div class="lc-val">${money(e.value)}</div></div>`).join('')||'<div style="color:var(--muted);font-size:12px;padding:8px 0">No deals</div>'}
+    </div>`;
+  }).join('')}</div>`;
+}
+
+/* ---------- Quotations ---------- */
+function renderQuotations(){
+  const list=DB.quotations();
+  content.innerHTML=table(`Quotations`,list.length,
+    `<th>Quote ID</th><th>Date</th><th>Customer</th><th>Product</th><th>Amount</th><th>Discount</th><th>Valid Till</th><th>Owner</th><th>Status</th><th></th>`,
+    ()=>{const q=(document.getElementById('globalSearch').value||'').toLowerCase();
+      return list.filter(x=>!q||[x.id,x.customer,x.product].join(' ').toLowerCase().includes(q)).sort((a,b)=>b.date.localeCompare(a.date)).map(x=>`<tr>
+      <td class="strong tabular">${x.id}</td><td class="sub tabular">${x.date}</td><td>${userCell(x.customer)}</td>
+      <td>${x.product} <span class="sub">×${x.qty}</span></td><td class="strong tabular">${money(x.amount)}</td>
+      <td class="tabular">${x.discount}%</td><td class="sub tabular">${x.validTill}</td><td>${x.salesperson.split(' ')[0]}</td>
+      <td>${quoChip(x.status)}</td>
+      <td><div class="row-actions" style="display:flex"><button onclick="convertQuote('${x.id}')" title="Convert to Order">${I.arrow}</button><button onclick="delRow('quotations','${x.id}')" title="Delete">${I.trash}</button></div></td>
+    </tr>`).join('');},'quo-body','No quotations yet.');
+  paintTable('quo-body');
+}
+
+/* ---------- Orders ---------- */
+function renderOrders(){
+  const list=DB.orders();
+  content.innerHTML=`<div class="card"><div class="card-head"><h3>Orders <span class="chip c-neutral" style="margin-left:4px">${list.length}</span></h3>
+    <div class="tools"><select class="field" id="f-ostat" onchange="paintTable('ord-body')"><option value="">All Status</option>${['Confirmed','In Production','Ready','Dispatched','Delivered','Cancelled'].map(s=>`<option>${s}</option>`).join('')}</select></div></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Order ID</th><th>Date</th><th>Customer</th><th>Product</th><th>Amount</th><th>Payment</th><th>Exp. Dispatch</th><th>Status</th><th>Advance Stage</th></tr></thead>
+    <tbody id="ord-body"></tbody></table></div></div>`;
+  paintTable('ord-body');
+}
+
+/* ---------- Dispatch ---------- */
+function renderDispatch(){
+  const list=DB.dispatch();
+  content.innerHTML=`<div class="card"><div class="card-head"><h3>Dispatch & Delivery <span class="chip c-neutral" style="margin-left:4px">${list.length}</span></h3></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Dispatch ID</th><th>Order</th><th>Customer</th><th>Product</th><th>Courier</th><th>Tracking No.</th><th>Dispatched</th><th>ETA</th><th>Status</th></tr></thead>
+    <tbody id="dis-body"></tbody></table></div></div>`;
+  paintTable('dis-body');
+}
+
+/* ---------- Customers ---------- */
+function renderCustomers(){
+  const list=DB.customers(), ord=DB.orders();
+  content.innerHTML=`<div class="card"><div class="card-head"><h3>Customers <span class="chip c-neutral" style="margin-left:4px">${list.length}</span></h3>
+    <div class="tools"><button class="btn primary sm" onclick="openCustModal()">${I.plus}Add Customer</button></div></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Customer ID</th><th>Company</th><th>Contact Person</th><th>Email</th><th>Phone</th><th>City</th><th>Type</th><th>Orders</th><th>Lifetime Value</th><th></th></tr></thead>
+    <tbody id="cust-body"></tbody></table></div></div>`;
+  paintTable('cust-body');
+}
+
+/* ---------- Products ---------- */
+function renderProducts(){
+  const list=DB.products();
+  const totalStockVal=list.reduce((s,p)=>s+p.price*p.stock,0);
+  content.innerHTML=`
+    <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+      ${dcard('box','rgba(42,120,214,.12)','#2a78d6',list.length,'Total SKUs','+2','up')}
+      ${dcard('money','rgba(12,163,12,.13)','#0ca30c',short(totalStockVal),'Inventory Value','+6%','up')}
+      ${dcard('cart','rgba(237,161,0,.14)','#b06a00',list.filter(p=>p.stock>0&&p.stock<10).length,'Low Stock','','up').replace('<span class="delta up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m6 15 6-6 6 6"/></svg></span>','')}
+      ${dcard('truck','rgba(208,59,59,.12)','#d03b3b',list.filter(p=>p.stock===0).length,'Out of Stock','','up').replace('<span class="delta up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m6 15 6-6 6 6"/></svg></span>','')}
+    </div>
+    <div class="card"><div class="card-head"><h3>Product Catalog</h3>
+      <div class="tools"><select class="field" id="f-cat" onchange="paintTable('prod-body')"><option value="">All Categories</option>${CATS.map(c=>`<option>${c}</option>`).join('')}</select>
+      <button class="btn primary sm" onclick="openProdModal()">${I.plus}Add Product</button></div></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Product ID</th><th>Name</th><th>SKU</th><th>Category</th><th>Unit Price</th><th>Stock</th><th>Stock Value</th><th>Status</th><th></th></tr></thead>
+    <tbody id="prod-body"></tbody></table></div></div>`;
+  paintTable('prod-body');
+}
+
+/* ---------- unified table painter ---------- */
+function table(title,count,head,rowsFn,bodyId,empty){
+  return `<div class="card"><div class="card-head"><h3>${title} <span class="chip c-neutral" style="margin-left:4px">${count}</span></h3></div>
+    <div style="overflow-x:auto"><table><thead><tr>${head}</tr></thead><tbody id="${bodyId}"></tbody></table></div></div>`;
+}
+function paintTable(bodyId){
+  const body=document.getElementById(bodyId); if(!body)return;
+  const q=(document.getElementById('globalSearch').value||'').toLowerCase();
+  let html='';
+  if(bodyId==='ord-body'){
+    const f=document.getElementById('f-ostat')?.value||'';
+    let rows=DB.orders().filter(o=>(!f||o.status===f)&&(!q||[o.id,o.customer,o.product].join(' ').toLowerCase().includes(q))).sort((a,b)=>b.date.localeCompare(a.date));
+    html=rows.map(o=>`<tr><td class="strong tabular">${o.id}</td><td class="sub tabular">${o.date}</td><td>${userCell(o.customer)}</td>
+      <td>${o.product} <span class="sub">×${o.qty}</span></td><td class="strong tabular">${money(o.amount)}</td><td>${payChip(o.payment)}</td>
+      <td class="sub tabular">${o.expDispatch}</td><td>${orderChip(o.status)}</td>
+      <td>${nextStageBtn(o)}</td></tr>`).join('')||emptyRow(9);
+  } else if(bodyId==='dis-body'){
+    let rows=DB.dispatch().filter(d=>!q||[d.id,d.customer,d.tracking,d.orderId].join(' ').toLowerCase().includes(q)).sort((a,b)=>b.dispatchedOn.localeCompare(a.dispatchedOn));
+    html=rows.map(d=>`<tr><td class="strong tabular">${d.id}</td><td class="tabular">${d.orderId}</td><td>${userCell(d.customer)}</td>
+      <td>${d.product} <span class="sub">×${d.qty}</span></td><td>${d.courier}</td><td class="sub tabular">${d.tracking}</td>
+      <td class="sub tabular">${d.dispatchedOn}</td><td class="sub tabular">${d.eta}</td><td>${disChip(d.status)}</td></tr>`).join('')||emptyRow(9);
+  } else if(bodyId==='cust-body'){
+    const ord=DB.orders();
+    let rows=DB.customers().filter(c=>!q||[c.id,c.name,c.contact,c.city].join(' ').toLowerCase().includes(q));
+    html=rows.map(c=>{const co=ord.filter(o=>o.custId===c.id);const val=co.reduce((s,o)=>s+o.amount,0);
+      return `<tr><td class="strong tabular">${c.id}</td><td>${userCell(c.name)}</td><td>${c.contact}</td>
+      <td class="sub">${c.email}</td><td class="sub tabular">${c.phone}</td><td>${c.city}</td>
+      <td><span class="chip c-neutral">${c.type}</span></td><td class="tabular">${co.length}</td><td class="strong tabular">${money(val)}</td>
+      <td><div class="row-actions" style="display:flex"><button onclick="openCustModal('${c.id}')">${I.edit}</button><button onclick="delRow('customers','${c.id}')">${I.trash}</button></div></td></tr>`;}).join('')||emptyRow(10);
+  } else if(bodyId==='prod-body'){
+    const f=document.getElementById('f-cat')?.value||'';
+    let rows=DB.products().filter(p=>(!f||p.cat===f)&&(!q||[p.id,p.name,p.sku].join(' ').toLowerCase().includes(q)));
+    html=rows.map(p=>{const st=p.stock===0?'<span class="chip c-lost">Out of Stock</span>':p.stock<10?'<span class="chip c-prog">Low</span>':'<span class="chip c-won">In Stock</span>';
+      return `<tr><td class="strong tabular">${p.id}</td><td class="strong">${p.name}</td><td class="sub tabular">${p.sku}</td><td>${p.cat}</td>
+      <td class="strong tabular">${money(p.price)}</td><td class="tabular">${p.stock} ${p.unit}</td><td class="tabular">${money(p.price*p.stock)}</td><td>${st}</td>
+      <td><div class="row-actions" style="display:flex"><button onclick="openProdModal('${p.id}')">${I.edit}</button><button onclick="delRow('products','${p.id}')">${I.trash}</button></div></td></tr>`;}).join('')||emptyRow(9);
+  } else if(bodyId==='quo-body'){
+    const list=DB.quotations();
+    let rows=list.filter(x=>!q||[x.id,x.customer,x.product].join(' ').toLowerCase().includes(q)).sort((a,b)=>b.date.localeCompare(a.date));
+    html=rows.map(x=>`<tr><td class="strong tabular">${x.id}</td><td class="sub tabular">${x.date}</td><td>${userCell(x.customer)}</td>
+      <td>${x.product} <span class="sub">×${x.qty}</span></td><td class="strong tabular">${money(x.amount)}</td>
+      <td class="tabular">${x.discount}%</td><td class="sub tabular">${x.validTill}</td><td>${x.salesperson.split(' ')[0]}</td><td>${quoChip(x.status)}</td>
+      <td><div class="row-actions" style="display:flex"><button onclick="convertQuote('${x.id}')" title="Convert to Order">${I.arrow}</button><button onclick="delRow('quotations','${x.id}')">${I.trash}</button></div></td></tr>`).join('')||emptyRow(10);
+  }
+  body.innerHTML=html;
+}
+function emptyRow(c){return `<tr><td colspan="${c}" class="empty">No records found.</td></tr>`;}
+
+/* ---------- workflow actions ---------- */
+const ORDER_FLOW=['Confirmed','In Production','Ready','Dispatched','Delivered'];
+function nextStageBtn(o){
+  const i=ORDER_FLOW.indexOf(o.status);
+  if(o.status==='Delivered')return '<span class="chip c-won">Completed</span>';
+  if(o.status==='Cancelled')return '<span class="chip c-lost">Cancelled</span>';
+  return `<button class="btn sm" onclick="advanceOrder('${o.id}')">→ ${ORDER_FLOW[i+1]}</button>`;
+}
+function advanceOrder(id){
+  const ord=DB.orders(); const o=ord.find(x=>x.id===id); if(!o)return;
+  const i=ORDER_FLOW.indexOf(o.status); o.status=ORDER_FLOW[i+1];
+  DB.save('orders',ord);
+  if(o.status==='Dispatched'){ // auto-create dispatch record
+    const dis=DB.dispatch();
+    if(!dis.find(d=>d.orderId===o.id)){
+      dis.push({id:uid('DSP-'),orderId:o.id,customer:o.customer,product:o.product,qty:o.qty,
+        courier:'BlueDart',tracking:'TRK'+Math.floor(Math.random()*9000000+1000000),status:'Shipped',
+        dispatchedOn:today(),eta:addDays(today(),5)});
+      DB.save('dispatch',dis);
+    }
+    toast('Order dispatched — shipment created ✓');
+  } else if(o.status==='Delivered'){
+    const dis=DB.dispatch(); const d=dis.find(x=>x.orderId===o.id); if(d){d.status='Delivered';DB.save('dispatch',dis);}
+    toast('Order delivered ✓');
+  } else toast('Order moved to '+o.status);
+  refreshBadges(); paintTable('ord-body');
+}
+function convertQuote(id){
+  const quo=DB.quotations(); const q=quo.find(x=>x.id===id); if(!q)return;
+  const ord=DB.orders();
+  if(ord.find(o=>o.quoteId===id)){toast('Order already exists for this quote');return;}
+  q.status='Accepted'; DB.save('quotations',quo);
+  ord.push({id:uid('ORD-'),quoteId:q.id,customer:q.customer,custId:q.custId,product:q.product,qty:q.qty,
+    amount:q.amount,date:today(),status:'Confirmed',salesperson:q.salesperson,payment:'Pending',expDispatch:addDays(today(),10)});
+  DB.save('orders',ord);
+  toast('Quote converted to order ✓'); refreshBadges();
+  if(state.view==='quotations')paintTable('quo-body'); else setView('orders');
+}
+function delRow(key,id){
+  if(!confirm('Delete this record?'))return;
+  DB.save(key,DB[key]().filter(r=>r.id!==id));
+  toast('Record deleted'); refreshBadges(); setView(state.view);
+}
+
+/* ---------- MODALS ---------- */
+const modalBg=document.getElementById('modalBg'), modal=document.getElementById('modal');
+function closeModal(){modalBg.classList.remove('show');}
+modalBg.addEventListener('click',e=>{if(e.target===modalBg)closeModal();});
+function openModal(html){modal.innerHTML=html;modalBg.classList.add('show');}
+
+function openEnqModal(id){
+  const e=id?DB.enquiries().find(x=>x.id===id):{};
+  const prods=DB.products(), custs=DB.customers();
+  openModal(`<div class="modal-head"><h3>${id?'Edit':'New'} Enquiry</h3><button class="icon-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="form-row"><label>Customer</label><select id="m-cust">${custs.map(c=>`<option ${e.custId===c.id?'selected':''}>${c.name}</option>`).join('')}</select></div>
+      <div class="form-row two"><div><label>Product</label><select id="m-prod">${prods.map(p=>`<option ${e.prodId===p.id?'selected':''} data-price="${p.price}" data-id="${p.id}">${p.name}</option>`).join('')}</select></div>
+        <div><label>Quantity</label><input id="m-qty" type="number" min="1" value="${e.qty||1}"></div></div>
+      <div class="form-row two"><div><label>Source</label><select id="m-src">${SOURCES.map(s=>`<option ${e.source===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div><label>Salesperson</label><select id="m-sales">${SALES.map(s=>`<option ${e.salesperson===s?'selected':''}>${s}</option>`).join('')}</select></div></div>
+      <div class="form-row two"><div><label>Priority</label><select id="m-prio">${['High','Medium','Low'].map(p=>`<option ${e.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
+        <div><label>Stage</label><select id="m-stage">${['New','Contacted','Qualified','Quoted','Won','Lost'].map(s=>`<option ${e.stage===s?'selected':''}>${s}</option>`).join('')}</select></div></div>
+      <div class="form-row"><label>Note</label><textarea id="m-note" rows="2">${e.note||''}</textarea></div>
+    </div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveEnq('${id||''}')">${I.check}Save Enquiry</button></div>`);
+}
+function saveEnq(id){
+  const prodSel=document.getElementById('m-prod').selectedOptions[0];
+  const qty=+document.getElementById('m-qty').value||1;
+  const rec={
+    customer:document.getElementById('m-cust').value,
+    custId:DB.customers().find(c=>c.name===document.getElementById('m-cust').value)?.id,
+    product:document.getElementById('m-prod').value, prodId:prodSel.dataset.id, qty,
+    source:document.getElementById('m-src').value, salesperson:document.getElementById('m-sales').value,
+    priority:document.getElementById('m-prio').value, stage:document.getElementById('m-stage').value,
+    note:document.getElementById('m-note').value, value:(+prodSel.dataset.price)*qty
+  };
+  const list=DB.enquiries();
+  if(id){Object.assign(list.find(x=>x.id===id),rec);} else {rec.id=uid('ENQ-');rec.date=today();list.unshift(rec);}
+  DB.save('enquiries',list); closeModal(); toast(id?'Enquiry updated ✓':'Enquiry added ✓'); refreshBadges(); setView('enquiries');
+}
+
+function openCustModal(id){
+  const c=id?DB.customers().find(x=>x.id===id):{};
+  openModal(`<div class="modal-head"><h3>${id?'Edit':'New'} Customer</h3><button class="icon-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="form-row"><label>Company Name</label><input id="c-name" value="${c.name||''}"></div>
+      <div class="form-row two"><div><label>Contact Person</label><input id="c-contact" value="${c.contact||''}"></div><div><label>City</label><select id="c-city">${CITIES.map(x=>`<option ${c.city===x?'selected':''}>${x}</option>`).join('')}</select></div></div>
+      <div class="form-row two"><div><label>Email</label><input id="c-email" value="${c.email||''}"></div><div><label>Phone</label><input id="c-phone" value="${c.phone||''}"></div></div>
+      <div class="form-row"><label>Type</label><select id="c-type">${['Enterprise','SMB','Retail'].map(x=>`<option ${c.type===x?'selected':''}>${x}</option>`).join('')}</select></div>
+    </div><div class="modal-foot"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveCust('${id||''}')">${I.check}Save</button></div>`);
+}
+function saveCust(id){
+  const rec={name:v('c-name'),contact:v('c-contact'),city:v('c-city'),email:v('c-email'),phone:v('c-phone'),type:v('c-type')};
+  const list=DB.customers();
+  if(id){Object.assign(list.find(x=>x.id===id),rec);}else{rec.id=uid('CUST-');rec.since=new Date().getFullYear();list.unshift(rec);}
+  DB.save('customers',list); closeModal(); toast('Customer saved ✓'); setView('customers');
+}
+function openProdModal(id){
+  const p=id?DB.products().find(x=>x.id===id):{};
+  openModal(`<div class="modal-head"><h3>${id?'Edit':'New'} Product</h3><button class="icon-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="form-row"><label>Product Name</label><input id="p-name" value="${p.name||''}"></div>
+      <div class="form-row two"><div><label>SKU</label><input id="p-sku" value="${p.sku||''}"></div><div><label>Category</label><select id="p-cat">${CATS.map(x=>`<option ${p.cat===x?'selected':''}>${x}</option>`).join('')}</select></div></div>
+      <div class="form-row two"><div><label>Unit Price (₹)</label><input id="p-price" type="number" value="${p.price||''}"></div><div><label>Stock</label><input id="p-stock" type="number" value="${p.stock??''}"></div></div>
+      <div class="form-row"><label>Unit</label><select id="p-unit">${['pc','set','sqft','box'].map(x=>`<option ${p.unit===x?'selected':''}>${x}</option>`).join('')}</select></div>
+    </div><div class="modal-foot"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveProd('${id||''}')">${I.check}Save</button></div>`);
+}
+function saveProd(id){
+  const rec={name:v('p-name'),sku:v('p-sku'),cat:v('p-cat'),price:+v('p-price')||0,stock:+v('p-stock')||0,unit:v('p-unit')};
+  const list=DB.products();
+  if(id){Object.assign(list.find(x=>x.id===id),rec);}else{rec.id=uid('PRD-');list.unshift(rec);}
+  DB.save('products',list); closeModal(); toast('Product saved ✓'); setView('products');
+}
+const v=id=>document.getElementById(id).value;
+
+/* ---------- Admin ---------- */
+function renderAdmin(){
+  const users=[
+    {name:'Ankush Goswami',role:'Administrator',email:'mis@oakcraft.in',status:'Active'},
+    ...SALES.map((s,i)=>({name:s,role:i===0?'Sales Manager':'Sales Executive',email:s.toLowerCase().replace(' ','.')+'@oakcraft.in',status:i===4?'Inactive':'Active'}))
+  ];
+  content.innerHTML=`
+    <div class="grid-3">
+      <div class="panel"><h3>Team Members</h3><div style="font-size:32px;font-weight:750;margin-top:10px" class="tabular">${users.length}</div><div class="lbl" style="color:var(--text-2)">${users.filter(u=>u.status==='Active').length} active</div></div>
+      <div class="panel"><h3>Records in System</h3><div style="font-size:32px;font-weight:750;margin-top:10px" class="tabular">${DB.enquiries().length+DB.orders().length+DB.customers().length+DB.products().length}</div><div class="lbl" style="color:var(--text-2)">across all modules</div></div>
+      <div class="panel"><h3>Data Storage</h3><div style="font-size:32px;font-weight:750;margin-top:10px" class="tabular">Local</div><div class="lbl" style="color:var(--text-2)">Browser storage (demo)</div></div>
+    </div>
+    <div class="card" style="margin-bottom:16px"><div class="card-head"><h3>User Management</h3><div class="tools"><button class="btn primary sm" onclick="toast('User invites available in backend build')">${I.plus}Invite User</button></div></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th></tr></thead>
+    <tbody>${users.map(u=>`<tr><td>${userCell(u.name)}</td><td class="sub">${u.email}</td><td><span class="chip ${u.role==='Administrator'?'c-quo':'c-new'}">${u.role}</span></td><td>${u.status==='Active'?'<span class="chip c-won">Active</span>':'<span class="chip c-neutral">Inactive</span>'}</td></tr>`).join('')}</tbody></table></div></div>
+
+    <div class="grid-2">
+      <div class="panel"><h3>Pipeline Configuration</h3>
+        <p style="color:var(--text-2);font-size:13px;margin:10px 0">Sales stages used across the CRM:</p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">${['New','Contacted','Qualified','Quoted','Won','Lost'].map(s=>`<span class="chip c-neutral">${s}</span>`).join('')}</div>
+        <p style="color:var(--text-2);font-size:13px;margin:16px 0 8px">Order workflow:</p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">${ORDER_FLOW.map(s=>`<span class="chip c-new">${s}</span>`).join('')}</div>
+      </div>
+      <div class="panel"><h3>Data & Settings</h3>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
+          <button class="btn" onclick="exportData()">${I.arrow}Export all data (JSON)</button>
+          <button class="btn" onclick="resetDemo()">${I.trash}Reset to demo data</button>
+        </div>
+        <p style="color:var(--muted);font-size:12px;margin-top:14px">Company: OakCraft · Currency: INR (₹) · Timezone: Asia/Kolkata</p>
+      </div>
+    </div>`;
+}
+function exportData(){
+  const data={enquiries:DB.enquiries(),quotations:DB.quotations(),orders:DB.orders(),dispatch:DB.dispatch(),customers:DB.customers(),products:DB.products()};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='oakcraft-crm-data.json';a.click();
+  toast('Data exported ✓');
+}
+function resetDemo(){ if(!confirm('Reset all data to demo seed?'))return; ['enquiries','quotations','orders','dispatch','customers','products','crm_seeded'].forEach(k=>{try{localStorage.removeItem(k)}catch(e){delete mem[k]}}); seed(); toast('Demo data restored ✓'); setView(state.view); }
+
+/* ---------- toast + badges + theme ---------- */
+let toastT;
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2600);}
+function refreshBadges(){
+  document.getElementById('nb-enq').textContent=DB.enquiries().filter(e=>e.stage==='New').length;
+  document.getElementById('nb-ord').textContent=DB.orders().filter(o=>!['Delivered','Cancelled'].includes(o.status)).length;
+  document.getElementById('nb-dis').textContent=DB.dispatch().filter(d=>d.status!=='Delivered').length;
+}
+function applyTheme(){ document.getElementById('themeBtn').innerHTML=isDark()?I.sun:I.moon; }
+
+/* ---------- init ---------- */
+function injectIcons(){
+  document.querySelectorAll('.nav a[data-icon]').forEach(a=>{a.insertAdjacentHTML('afterbegin',I[a.dataset.icon]);});
+  document.querySelector('.search').insertAdjacentHTML('afterbegin',I.search);
+  document.getElementById('quickAdd').insertAdjacentHTML('afterbegin',I.plus);
+}
+function init(){
+  seed(); injectIcons(); applyTheme(); refreshBadges();
+  document.querySelectorAll('.nav a[data-view]').forEach(a=>a.addEventListener('click',()=>setView(a.dataset.view)));
+  document.getElementById('themeBtn').addEventListener('click',()=>{
+    document.documentElement.setAttribute('data-theme',isDark()?'light':'dark');applyTheme();setView(state.view);});
+  document.getElementById('quickAdd').addEventListener('click',()=>openEnqModal());
+  document.getElementById('globalSearch').addEventListener('input',()=>{
+    const map={enquiries:'enq-body',quotations:'quo-body',orders:'ord-body',dispatch:'dis-body',customers:'cust-body',products:'prod-body'};
+    if(state.view==='enquiries')paintEnq(); else if(map[state.view])paintTable(map[state.view]);});
+  setView('dashboard');
+}
+init();
+
+</script>
+</body>
+</html>
