@@ -954,7 +954,7 @@ function renderAdmin(){
     <div style="overflow-x:auto"><table><thead><tr><th>Name</th><th>Login Email / ID</th><th>Mobile</th><th>Role</th><th>Status</th><th></th></tr></thead>
     <tbody>${users.map(u=>`<tr><td>${userCell(u.name)}</td><td class="sub">${u.email}</td><td class="sub tabular">${u.phone||'—'}</td><td><span class="chip ${u.role==='Administrator'?'c-quo':u.role==='Sales Manager'?'c-ship':'c-new'}">${u.role}</span></td><td>${u.status==='Active'?'<span class="chip c-won">Active</span>':'<span class="chip c-neutral">Inactive</span>'}</td><td><div class="row-actions" style="display:flex"><button onclick="openUserModal('${u.email}')" title="Edit">${I.edit}</button><button onclick="openPermsModal('${u.email}')" title="Permissions">${I.gear||I.check}</button>${u.email!=='mis@oakcraft.in'?`<button onclick="delUser('${u.email}')" title="Remove">${I.trash}</button>`:''}</div></td></tr>`).join('')}</tbody></table></div></div>
 
-    <div class="card" style="margin-bottom:16px"><div class="card-head"><h3>Form Builder</h3></div>      <div style="padding:16px 20px;color:var(--text-2);font-size:13px">Add, edit or remove questions in your Enquiry and Order forms. Choose the answer type for each question (short text, long description, number, date, dropdown, checkbox, or file upload).</div>      <div style="padding:0 20px 18px;display:flex;gap:10px;flex-wrap:wrap">        <button class="btn primary" onclick="openFormBuilder('enquiry')">${I.edit}Enquiry Form Builder</button>        <button class="btn primary" onclick="openFormBuilder('order')">${I.edit}Order Form Builder</button>      </div>    </div>
+    <div class="card" style="margin-bottom:16px"><div class="card-head"><h3>Form Builder</h3></div>      <div style="padding:16px 20px;color:var(--text-2);font-size:13px">Add, edit or remove questions in your Enquiry, Order, Customer and Product forms. Choose the answer type for each question (short text, long description, number, date, dropdown, checkbox, or file upload).</div>      <div style="padding:0 20px 18px;display:flex;gap:10px;flex-wrap:wrap">        <button class="btn primary" onclick="openFormBuilder('enquiry')">${I.edit}Enquiry Form Builder</button>        <button class="btn primary" onclick="openFormBuilder('order')">${I.edit}Order Form Builder</button>        <button class="btn primary" onclick="openFormBuilder('customer')">${I.edit}Customer Form Builder</button>        <button class="btn primary" onclick="openFormBuilder('product')">${I.edit}Product Form Builder</button>      </div>    </div>
 
     <div class="grid-2">
       <div class="panel"><h3>Pipeline Configuration</h3>
@@ -966,7 +966,7 @@ function renderAdmin(){
       <div class="panel"><h3>Data & Settings</h3>
         <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
           <button class="btn" onclick="exportData()">${I.arrow}Export all data (JSON)</button>
-          <button class="btn" onclick="resetDemo()">${I.trash}Clear all data</button>
+          <button class="btn" disabled title="Disabled to protect your data" style="opacity:.5;cursor:not-allowed">${I.trash}Clear all data (disabled)</button>
         </div>
         <p style="color:var(--muted);font-size:12px;margin-top:14px">Company: OakCraft · Currency: INR (₹) · Timezone: Asia/Kolkata</p>
       </div>
@@ -1002,6 +1002,22 @@ const DEFAULT_FORMS = {
     {id:'o_stat', label:'Status', type:'dropdown', options:['Confirmed','In Production','Ready','Dispatched','Delivered','Cancelled']},
     {id:'o_img',  label:'Upload Product Image', type:'file'},
     {id:'o_note', label:'Note', type:'longtext'}
+  ],
+  customer: [
+    {id:'c_name',   label:'Company Name', type:'text', required:true, locked:true},
+    {id:'c_contact',label:'Contact Person', type:'text'},
+    {id:'c_city',   label:'City', type:'dropdown', source:'cities'},
+    {id:'c_email',  label:'Email', type:'text'},
+    {id:'c_phone',  label:'Phone', type:'text'},
+    {id:'c_type',   label:'Type', type:'dropdown', options:['Enterprise','SMB','Retail']}
+  ],
+  product: [
+    {id:'p_name',  label:'Product Name', type:'text', required:true, locked:true},
+    {id:'p_sku',   label:'SKU', type:'text'},
+    {id:'p_cat',   label:'Category', type:'dropdown', source:'cats'},
+    {id:'p_price', label:'Unit Price (₹)', type:'number'},
+    {id:'p_stock', label:'Stock', type:'number'},
+    {id:'p_unit',  label:'Unit', type:'dropdown', options:['pc','set','sqft','box']}
   ]
 };
 function getForm(which){
@@ -1018,7 +1034,7 @@ function saveForm(which, fields){
 }
 function openFormBuilder(which){
   const fields = getForm(which);
-  const title = which==='enquiry' ? 'Enquiry Form' : 'Order Form';
+  const title = {enquiry:'Enquiry Form',order:'Order Form',customer:'Customer Form',product:'Product Form'}[which] || 'Form';
   const rows = fields.map((f,i)=>{
     const locked = f.locked ? ' <span class="chip c-neutral" style="font-size:10px">core</span>' : '';
     const tName = (FIELD_TYPES.find(x=>x.v===f.type)||{}).t || f.type;
@@ -1135,6 +1151,8 @@ function exportData(){
   toast('Data exported ✓');
 }
 function resetDemo(){
+  toast('Clear all data is disabled to protect your records');
+  return;
   if(!confirm('Permanently clear ALL CRM data from this browser AND your Google Sheet? This cannot be undone.')) return;
   const keys=['enquiries','quotations','orders','dispatch','customers','products'];
   keys.forEach(k=>{ try{localStorage.removeItem(k)}catch(e){delete mem[k]} });
