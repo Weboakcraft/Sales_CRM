@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
 <head>
+<script>try{var _t=localStorage.getItem('oc_theme');if(_t==='dark'||_t==='light'){document.documentElement.setAttribute('data-theme',_t);}}catch(e){}</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OakCraft Sales CRM — Enquiry to Dispatch</title>
@@ -1272,7 +1273,7 @@ async function init(){
   seed(); refreshBadges();
   document.querySelectorAll('.nav a[data-view]').forEach(a=>a.addEventListener('click',()=>setView(a.dataset.view)));
   document.getElementById('themeBtn').addEventListener('click',()=>{
-    document.documentElement.setAttribute('data-theme',isDark()?'light':'dark');applyTheme();setView(state.view);});
+    var _nt=isDark()?'light':'dark';document.documentElement.setAttribute('data-theme',_nt);try{localStorage.setItem('oc_theme',_nt);}catch(e){}applyTheme();setView(state.view);});
   document.getElementById('quickAdd').addEventListener('click',()=>{
     var qa=document.getElementById('quickAdd');
     if(qa.dataset.mode==='order'){ openOrderModal(); } else { openEnqModal(); }
