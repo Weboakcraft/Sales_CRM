@@ -254,9 +254,44 @@ const I = {
 /* ---------- storage helpers ---------- */
 const store = {
   get(k, def){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):def; }catch(e){ return mem[k]??def; } },
-  set(k, val){ try{ localStorage.setItem(k, JSON.stringify(val)); }catch(e){ mem[k]=val; } }
+  set(k, val){ try{ localStorage.setItem(k, JSON.stringify(val)); }catch(e){ mem[k]=val; } try{ CLOUD.push(k, val); }catch(e){} }
 };
 const mem = {};
+/* ===== OakCraft Cloud Sync (Google Sheets backend) ===== */
+const CLOUD = {
+  url: "https://script.google.com/macros/s/AKfycbwYDLF2Mh8SCuMTLJTesuIunJ03tuAYFW7x2etsaKUJT3Dua29IsFzU-4E5eiDAX6o1/exec",
+  // which localStorage keys map to Sheet collections
+  keys: ['enquiries','quotations','orders','dispatch','customers','products'],
+  ready: false,
+  _timers: {},
+  async pull(){
+    try{
+      const r = await fetch(this.url + '?action=getAll', {redirect:'follow'});
+      const j = await r.json();
+      const d = j.data || j || {};
+      this.keys.forEach(k=>{
+        if(Array.isArray(d[k])){
+          // records stored as {id, data, updatedAt} -> unwrap .data
+          const rows = d[k].map(x=> (x && x.data!==undefined) ? x.data : x);
+          try{ localStorage.setItem(k, JSON.stringify(rows)); }catch(e){ mem[k]=rows; }
+        }
+      });
+      this.ready = true;
+      return true;
+    }catch(e){ console.warn('CLOUD pull failed', e); return false; }
+  },
+  // push an entire collection to the sheet (debounced per-key)
+  push(key, arr){
+    if(!this.keys.includes(key)) return;
+    clearTimeout(this._timers[key]);
+    this._timers[key] = setTimeout(()=>{
+      const records = (arr||[]).map(o=>({ id: o.id || ('X'+Date.now()+Math.random().toString(36).slice(2,6)), data: o }));
+      fetch(this.url, {method:'POST', redirect:'follow', headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({action:'saveMany', collection:key, records})
+      }).catch(e=>console.warn('CLOUD push failed', key, e));
+    }, 400);
+  }
+};
 const money = n => '₹' + Number(n||0).toLocaleString('en-IN');
 const short = n => n>=1e7 ? '₹'+(n/1e7).toFixed(2)+'Cr' : n>=1e5 ? '₹'+(n/1e5).toFixed(2)+'L' : n>=1e3 ? '₹'+(n/1e3).toFixed(1)+'K' : '₹'+n;
 const uid = p => p + Date.now().toString(36).slice(-4).toUpperCase() + Math.floor(Math.random()*90+10);
@@ -272,6 +307,7 @@ const CITIES = ['Mumbai','Delhi','Bengaluru','Pune','Ahmedabad','Chennai','Jaipu
 const CATS = ['Office Furniture','Modular Kitchen','Wardrobes','Seating','Storage','Custom Woodwork'];
 
 function seed(){
+  return; /* demo data disabled - data comes from Google Sheet */
   if(store.get('crm_seeded')) return;
   const companies = ['Techno Interiors','Skyline Builders','Green Valley Homes','Urban Nest','Prime Realty','Anand Constructions','Lotus Furnishings','Elite Spaces','Nova Developers','Grand Living','Craft & Co','Vertex Interiors','Maple Homes','Zenith Projects','Orchid Estates','Silverline Decor','Cosmos Realty','Fusion Interiors','Metro Furnish','Harmony Homes'];
   const products = [
@@ -378,6 +414,13 @@ function setView(v){
   document.getElementById('pageTitle').childNodes[0].nodeValue=t;
   document.getElementById('pageSub').textContent=s;
   document.getElementById('searchBox').style.display = ['customers','products','enquiries','orders','quotations','dispatch'].includes(v)?'block':'none';
+  (function(){
+    var qa=document.getElementById('quickAdd');
+    if(!qa) return;
+    if(v==='enquiries'){ qa.style.display=''; qa.dataset.mode='enquiry'; qa.childNodes[qa.childNodes.length-1].nodeValue='New Enquiry'; }
+    else if(v==='orders'){ qa.style.display=''; qa.dataset.mode='order'; qa.childNodes[qa.childNodes.length-1].nodeValue='New Order'; }
+    else { qa.style.display='none'; }
+  })();
   Object.values(state.charts).forEach(c=>{try{c.destroy()}catch(e){}}); state.charts={};
   ({dashboard:renderDashboard,enquiries:renderEnquiries,pipeline:renderPipeline,quotations:renderQuotations,
     orders:renderOrders,dispatch:renderDispatch,customers:renderCustomers,products:renderProducts,admin:renderAdmin}[v])();
@@ -747,6 +790,45 @@ function openEnqModal(id){
     </div>
     <div class="modal-foot"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveEnq('${id||''}')">${I.check}Save Enquiry</button></div>`);
 }
+function openOrderModal(id){
+  const o=id?DB.orders().find(x=>x.id===id):{};
+  const prods=DB.products(), custs=DB.customers();
+  openModal(`<div class="modal-head"><h3>${id?'Edit':'New'} Order</h3><button class="icon-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="form-row"><label>Customer</label><select id="o-cust">${custs.map(c=>`<option ${o.custId===c.id?'selected':''}>${c.name}</option>`).join('')}</select></div>
+      <div class="form-row two"><div><label>Product</label><select id="o-prod">${prods.map(p=>`<option ${o.prodId===p.id?'selected':''} data-price="${p.price}" data-id="${p.id}">${p.name}</option>`).join('')}</select></div>
+        <div><label>Quantity</label><input id="o-qty" type="number" min="1" value="${o.qty||1}"></div></div>
+      <div class="form-row two"><div><label>Salesperson</label><input id="o-sales" value="${o.salesperson||''}" placeholder="Salesperson"></div>
+        <div><label>Payment</label><select id="o-pay"><option ${o.payment==='Pending'?'selected':''}>Pending</option><option ${o.payment==='Partial'?'selected':''}>Partial</option><option ${o.payment==='Paid'?'selected':''}>Paid</option></select></div></div>
+      <div class="form-row two"><div><label>Status</label><select id="o-stat">${['Confirmed','In Production','Ready','Dispatched','Delivered','Cancelled'].map(s=>`<option ${o.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div><label>Expected Dispatch</label><input id="o-exp" type="date" value="${o.expDispatch||today()}"></div></div>
+      <div class="form-row"><label>Upload Product Image</label><input id="o-img" type="file" accept="image/*"><div id="o-img-prev" style="margin-top:8px">${o.image?`<img src="${o.image}" style="max-width:120px;max-height:120px;border-radius:8px;border:1px solid var(--border)">`:''}</div></div>
+      <div class="form-row"><label>Note</label><textarea id="o-note" rows="2" placeholder="Order note">${o.note||''}</textarea></div>
+    </div>
+    <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveOrder(${id?`'${id}'`:''})">Save Order</button></div>`);
+  var fin=document.getElementById('o-img');
+  if(fin){ fin.addEventListener('change',function(){ var f=this.files[0]; if(!f) return; var rd=new FileReader(); rd.onload=function(ev){ window.__orderImg=ev.target.result; document.getElementById('o-img-prev').innerHTML='<img src="'+ev.target.result+'" style="max-width:120px;max-height:120px;border-radius:8px;border:1px solid var(--border)">'; }; rd.readAsDataURL(f); }); }
+}
+function saveOrder(id){
+  const prodSel=document.getElementById('o-prod').selectedOptions[0];
+  const qty=+document.getElementById('o-qty').value||1;
+  const existing=id?DB.orders().find(x=>x.id===id):{};
+  const rec={
+    customer:document.getElementById('o-cust').value,
+    custId:(DB.customers().find(c=>c.name===document.getElementById('o-cust').value)||{}).id,
+    product:document.getElementById('o-prod').value, prodId:prodSel.dataset.id, qty,
+    amount:(+prodSel.dataset.price)*qty,
+    salesperson:document.getElementById('o-sales').value,
+    payment:document.getElementById('o-pay').value,
+    status:document.getElementById('o-stat').value,
+    expDispatch:document.getElementById('o-exp').value,
+    note:document.getElementById('o-note').value,
+    image: window.__orderImg || existing.image || ''
+  };
+  const list=DB.orders();
+  if(id){Object.assign(list.find(x=>x.id===id),rec);} else {rec.id=uid('ORD-');rec.date=today();list.unshift(rec);}
+  DB.save('orders',list); window.__orderImg=null; closeModal(); toast(id?'Order updated ✓':'Order added ✓'); refreshBadges(); setView('orders');
+}
 function saveEnq(id){
   const prodSel=document.getElementById('m-prod').selectedOptions[0];
   const qty=+document.getElementById('m-qty').value||1;
@@ -991,12 +1073,17 @@ function injectIcons(){
   document.querySelector('.search').insertAdjacentHTML('afterbegin',I.search);
   document.getElementById('quickAdd').insertAdjacentHTML('afterbegin',I.plus);
 }
-function init(){
-  seed(); injectIcons(); applyTheme(); refreshBadges();
+async function init(){
+  injectIcons(); applyTheme();
+  try{ await CLOUD.pull(); }catch(e){ console.warn('cloud pull error', e); }
+  seed(); refreshBadges();
   document.querySelectorAll('.nav a[data-view]').forEach(a=>a.addEventListener('click',()=>setView(a.dataset.view)));
   document.getElementById('themeBtn').addEventListener('click',()=>{
     document.documentElement.setAttribute('data-theme',isDark()?'light':'dark');applyTheme();setView(state.view);});
-  document.getElementById('quickAdd').addEventListener('click',()=>openEnqModal());
+  document.getElementById('quickAdd').addEventListener('click',()=>{
+    var qa=document.getElementById('quickAdd');
+    if(qa.dataset.mode==='order'){ openOrderModal(); } else { openEnqModal(); }
+  });
   document.getElementById('globalSearch').addEventListener('input',()=>{
     const map={enquiries:'enq-body',quotations:'quo-body',orders:'ord-body',dispatch:'dis-body',customers:'cust-body',products:'prod-body'};
     if(state.view==='enquiries')paintEnq(); else if(map[state.view])paintTable(map[state.view]);});
