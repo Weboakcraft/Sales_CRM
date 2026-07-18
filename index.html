@@ -797,21 +797,62 @@ function saveProd(id){
 }
 const v=id=>document.getElementById(id).value;
 
+/* ---------- Users store ---------- */
+function DB_users(){
+  let u = store.get('crm_users', null);
+  if(!u){
+    u = [
+      {name:'Ankush Goswami',role:'Administrator',email:'mis@oakcraft.in',phone:'7210876636',status:'Active'},
+      {name:'Vishu Mittal',role:'Administrator',email:'vishu@oakcraft.in',phone:'8700545550',status:'Active'},
+      ...SALES.map((s,i)=>({name:s,role:i===0?'Sales Manager':'Sales Executive',email:s.toLowerCase().replace(' ','.')+'@oakcraft.in',phone:'',status:i===4?'Inactive':'Active'}))
+    ];
+    store.set('crm_users', u);
+  }
+  return u;
+}
+function openUserModal(email){
+  const u = email ? DB_users().find(x=>x.email===email) : {};
+  openModal(`<div class="modal-head"><h3>${email?'Edit':'Add'} User Login</h3><button class="icon-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div style="font-size:12.5px;color:#b06a00;background:rgba(237,161,0,.12);padding:10px 12px;border-radius:10px;margin-bottom:14px">Preview mode: user is saved in this browser only. Real login (email + password) activates in the deployed app with Supabase connected.</div>
+      <div class="form-row two"><div><label>Full Name</label><input id="u-name" value="${u.name||''}"></div><div><label>Mobile Number</label><input id="u-phone" value="${u.phone||''}"></div></div>
+      <div class="form-row"><label>Login Email / ID</label><input id="u-email" type="email" value="${u.email||''}" ${email?'readonly':''} placeholder="user@oakcraft.in"></div>
+      <div class="form-row two"><div><label>Password ${email?'(leave blank to keep)':''}</label><input id="u-pass" type="password" minlength="6" placeholder="••••••"></div>
+        <div><label>Role</label><select id="u-role">${['Sales Executive','Sales Manager','Administrator'].map(r=>`<option ${u.role===r?'selected':''}>${r}</option>`).join('')}</select></div></div>
+      <div class="form-row"><label>Status</label><select id="u-status">${['Active','Inactive'].map(x=>`<option ${u.status===x?'selected':''}>${x}</option>`).join('')}</select></div>
+    </div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveUser('${email||''}')">${I.check}${email?'Save Changes':'Create Login'}</button></div>`);
+}
+function saveUser(email){
+  const name=v('u-name').trim(), mail=v('u-email').trim().toLowerCase(), pass=v('u-pass');
+  if(!name||!mail){ toast('Name and login email are required'); return; }
+  if(!email && pass.length<6){ toast('Password must be at least 6 characters'); return; }
+  const users=DB_users();
+  if(!email && users.find(x=>x.email===mail)){ toast('This email already exists'); return; }
+  const rec={name, email:mail, phone:v('u-phone'), role:v('u-role'), status:v('u-status')};
+  if(email){ Object.assign(users.find(x=>x.email===email), rec); }
+  else users.push(rec);
+  store.set('crm_users', users);
+  closeModal(); toast(email?'User updated ✓':'User login created ✓'); setView('admin');
+}
+function delUser(email){
+  if(!confirm('Remove this user?'))return;
+  store.set('crm_users', DB_users().filter(x=>x.email!==email));
+  toast('User removed'); setView('admin');
+}
+
 /* ---------- Admin ---------- */
 function renderAdmin(){
-  const users=[
-    {name:'Ankush Goswami',role:'Administrator',email:'mis@oakcraft.in',status:'Active'},
-    ...SALES.map((s,i)=>({name:s,role:i===0?'Sales Manager':'Sales Executive',email:s.toLowerCase().replace(' ','.')+'@oakcraft.in',status:i===4?'Inactive':'Active'}))
-  ];
+  const users=DB_users();
   content.innerHTML=`
     <div class="grid-3">
-      <div class="panel"><h3>Team Members</h3><div style="font-size:32px;font-weight:750;margin-top:10px" class="tabular">${users.length}</div><div class="lbl" style="color:var(--text-2)">${users.filter(u=>u.status==='Active').length} active</div></div>
+      <div class="panel"><h3>Team Members</h3><div style="font-size:32px;font-weight:750;margin-top:10px" class="tabular">${users.length}</div><div class="lbl" style="color:var(--text-2)">${users.filter(u=>u.status==='Active').length} active · ${users.filter(u=>u.role==='Administrator').length} admins</div></div>
       <div class="panel"><h3>Records in System</h3><div style="font-size:32px;font-weight:750;margin-top:10px" class="tabular">${DB.enquiries().length+DB.orders().length+DB.customers().length+DB.products().length}</div><div class="lbl" style="color:var(--text-2)">across all modules</div></div>
       <div class="panel"><h3>Data Storage</h3><div style="font-size:32px;font-weight:750;margin-top:10px" class="tabular">Local</div><div class="lbl" style="color:var(--text-2)">Browser storage (demo)</div></div>
     </div>
-    <div class="card" style="margin-bottom:16px"><div class="card-head"><h3>User Management</h3><div class="tools"><button class="btn primary sm" onclick="toast('User invites available in backend build')">${I.plus}Invite User</button></div></div>
-    <div style="overflow-x:auto"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th></tr></thead>
-    <tbody>${users.map(u=>`<tr><td>${userCell(u.name)}</td><td class="sub">${u.email}</td><td><span class="chip ${u.role==='Administrator'?'c-quo':'c-new'}">${u.role}</span></td><td>${u.status==='Active'?'<span class="chip c-won">Active</span>':'<span class="chip c-neutral">Inactive</span>'}</td></tr>`).join('')}</tbody></table></div></div>
+    <div class="card" style="margin-bottom:16px"><div class="card-head"><h3>User Management <span class="chip c-neutral" style="margin-left:4px">${users.length}</span></h3><div class="tools"><button class="btn primary sm" onclick="openUserModal()">${I.plus}Add User</button></div></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Name</th><th>Login Email / ID</th><th>Mobile</th><th>Role</th><th>Status</th><th></th></tr></thead>
+    <tbody>${users.map(u=>`<tr><td>${userCell(u.name)}</td><td class="sub">${u.email}</td><td class="sub tabular">${u.phone||'—'}</td><td><span class="chip ${u.role==='Administrator'?'c-quo':u.role==='Sales Manager'?'c-ship':'c-new'}">${u.role}</span></td><td>${u.status==='Active'?'<span class="chip c-won">Active</span>':'<span class="chip c-neutral">Inactive</span>'}</td><td><div class="row-actions" style="display:flex"><button onclick="openUserModal('${u.email}')" title="Edit">${I.edit}</button>${u.email!=='mis@oakcraft.in'?`<button onclick="delUser('${u.email}')" title="Remove">${I.trash}</button>`:''}</div></td></tr>`).join('')}</tbody></table></div></div>
 
     <div class="grid-2">
       <div class="panel"><h3>Pipeline Configuration</h3>
