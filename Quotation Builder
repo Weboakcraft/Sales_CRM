@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OakCraft — Pro Forma Quotation Builder</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+:root{
+  --gold:#B4802F; --gold-deep:#9A6C24; --ink:#241A10; --ink-soft:#4A3B28;
+  --paper:#FFFFFF; --cream:#F7F2E9; --cream-deep:#EFE6D5;
+  --line:#E3D9C6; --line-dark:#C9B68E; --muted:#8A7B65; --ok:#2E7D32; --live:#3FA34D; --err:#B0442C;
+}
+*{box-sizing:border-box; margin:0; padding:0}
+html,body{height:100%}
+body{
+  font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;
+  background:var(--cream); color:var(--ink); font-size:14px;
+  -webkit-print-color-adjust:exact; print-color-adjust:exact;
+}
+
+/* ============ APP CHROME (never prints/exports) ============ */
+#toolbar{
+  position:fixed; top:0; left:0; right:0; height:58px; z-index:50;
+  background:var(--ink); color:#F5EEDF; display:flex; align-items:center;
+  gap:14px; padding:0 20px; box-shadow:0 2px 12px rgba(36,26,16,.25);
+}
+#toolbar .brand{font-family:Georgia,serif; font-size:17px; letter-spacing:.06em}
+#toolbar .brand b{color:#D9AE5F}
+#toolbar .qbadge{
+  margin-left:6px; font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+  background:rgba(217,174,95,.14); border:1px solid rgba(217,174,95,.45);
+  color:#E8C888; padding:5px 12px; border-radius:3px;
+}
+#toolbar .spacer{flex:1}
+.btn{
+  border:1px solid var(--gold); background:transparent; color:#E8C888;
+  font-size:12px; letter-spacing:.12em; text-transform:uppercase;
+  padding:9px 16px; cursor:pointer; border-radius:3px; transition:all .15s;
+  font-family:inherit;
+}
+.btn:hover{background:rgba(217,174,95,.12)}
+.btn.primary{background:var(--gold); color:#FFF; border-color:var(--gold)}
+.btn.primary:hover{background:var(--gold-deep)}
+.btn:disabled{opacity:.5; cursor:wait}
+.btn:focus-visible{outline:2px solid #E8C888; outline-offset:2px}
+
+#pdfbar{
+  display:none; position:fixed; top:58px; left:0; right:0; z-index:49;
+  background:#EAF4EA; border-bottom:1px solid #BFDCC0; color:#215723;
+  padding:9px 20px; font-size:13px; align-items:center; gap:14px;
+}
+#pdfbar.show{display:flex}
+#pdfbar a{color:#215723; font-weight:700; text-decoration:underline; cursor:pointer}
+#pdfbar .close{margin-left:auto; cursor:pointer; border:none; background:none; color:#215723; font-size:16px}
+
+#layout{display:flex; padding-top:58px; min-height:100vh}
+
+/* ============ EDITOR SIDEBAR ============ */
+#editor{
+  width:392px; min-width:392px; background:#FDFBF7; border-right:1px solid var(--line);
+  height:calc(100vh - 58px); overflow-y:auto; padding:18px 18px 60px;
+}
+.ed-sec{margin-bottom:22px}
+.ed-sec h3{
+  font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--gold-deep);
+  border-bottom:1px solid var(--line); padding-bottom:7px; margin-bottom:12px; font-weight:600;
+}
+.f{margin-bottom:9px}
+.f label{display:block; font-size:11px; color:var(--muted); margin-bottom:3px; letter-spacing:.04em}
+.f label b{color:var(--err)}
+.f input, .f select, .f textarea{
+  width:100%; border:1px solid var(--line); border-radius:3px; padding:7px 9px;
+  font-size:13px; font-family:inherit; background:#FFF; color:var(--ink);
+}
+.f input:focus, .f select:focus, .f textarea:focus{outline:none; border-color:var(--gold)}
+.f input.err, .f select.err{border-color:var(--err); background:#FDF1EE}
+.frow{display:flex; gap:8px}
+.frow .f{flex:1}
+.item-card{
+  border:1px solid var(--line); border-left:3px solid var(--gold); border-radius:4px;
+  padding:11px; margin-bottom:11px; background:#FFF;
+}
+.item-card .ic-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px}
+.item-card .ic-head span{font-size:11px; letter-spacing:.12em; color:var(--gold-deep); font-weight:600}
+.item-card .rm{border:none; background:none; color:var(--err); cursor:pointer; font-size:11px; letter-spacing:.06em; text-transform:uppercase}
+.photo-drop{display:flex; align-items:center; gap:9px; margin-top:6px}
+.photo-drop img{width:44px; height:44px; object-fit:cover; border-radius:3px; border:1px solid var(--line)}
+.photo-drop .ph-empty{
+  width:44px; height:44px; border:1px dashed var(--line-dark); border-radius:3px;
+  display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:18px;
+}
+.photo-drop input[type=file]{font-size:11px; width:auto}
+.addbtn{
+  width:100%; border:1px dashed var(--gold); background:none; color:var(--gold-deep);
+  padding:10px; border-radius:4px; cursor:pointer; font-size:12px; letter-spacing:.1em;
+  text-transform:uppercase; font-family:inherit;
+}
+.addbtn:hover{background:rgba(180,128,47,.06)}
+.hint{font-size:11px; color:var(--muted); line-height:1.5; margin-top:6px}
+.hint.warn{color:var(--err); font-weight:600}
+
+/* ============ PREVIEW ============ */
+#preview{flex:1; overflow-y:auto; height:calc(100vh - 58px); padding:26px 30px 80px; display:flex; flex-direction:column; align-items:center}
+#printArea{display:flex; flex-direction:column; gap:26px}
+
+.page{
+  width:210mm; min-height:296mm; background:var(--paper);
+  box-shadow:0 4px 30px rgba(36,26,16,.16);
+  padding:12mm 12mm 10mm; position:relative; display:flex; flex-direction:column;
+  page-break-after:always; break-after:page;
+}
+.page:last-child{page-break-after:auto; break-after:auto}
+#measurePage{position:absolute; left:-9999px; top:0; visibility:hidden; box-shadow:none}
+body.exporting #printArea{gap:0; display:block}
+body.exporting .page{box-shadow:none}
+
+/* ---- Invoice pages ---- */
+.doc-head{display:flex; justify-content:space-between; align-items:flex-start}
+.doc-head img.logo{height:21mm; width:auto}
+.doc-title{text-align:right}
+.doc-title h1{
+  font-family:Georgia,serif; font-weight:400; font-size:20px; letter-spacing:.32em;
+  text-transform:uppercase; color:var(--ink); margin-bottom:4px;
+}
+.doc-title .qno{font-size:13px; color:var(--gold-deep); letter-spacing:.1em; font-weight:600}
+.doc-title .dsub{font-size:10px; color:var(--muted); margin-top:1mm}
+.gold-rule{height:2.5px; background:var(--gold); margin:4.5mm 0 0; position:relative}
+.gold-rule:after{content:''; position:absolute; left:0; right:0; top:4.5px; height:1px; background:var(--line-dark)}
+
+.cont-head{display:flex; justify-content:space-between; align-items:center}
+.cont-head img{height:12mm}
+.cont-head .ct{text-align:right}
+.cont-head .ct .t{font-family:Georgia,serif; font-size:13px; letter-spacing:.26em; text-transform:uppercase; color:var(--ink)}
+.cont-head .ct .s{font-size:10px; color:var(--gold-deep); letter-spacing:.1em; font-weight:600; margin-top:.6mm}
+
+.meta-band{display:flex; justify-content:space-between; gap:8mm; margin-top:4.5mm}
+.from-block{font-size:10px; line-height:1.55; color:var(--ink-soft); max-width:82mm}
+.from-block b{font-family:Georgia,serif; font-size:13px; color:var(--ink); letter-spacing:.04em}
+.meta-grid{display:grid; grid-template-columns:auto auto; gap:2px 14px; font-size:10.5px; align-content:start}
+.meta-grid .k{color:var(--muted); text-transform:uppercase; letter-spacing:.1em; font-size:9px; padding-top:2px}
+.meta-grid .v{font-weight:600; color:var(--ink); text-align:right}
+
+.billto{
+  margin-top:4.5mm; background:var(--cream); border:1px solid var(--line);
+  border-left:3px solid var(--gold); padding:3.6mm 5mm; display:flex; justify-content:space-between; gap:6mm;
+}
+.billto .bt-l{font-size:11px; line-height:1.6}
+.billto .lbl{font-size:9px; letter-spacing:.18em; text-transform:uppercase; color:var(--gold-deep); font-weight:700; margin-bottom:2px}
+.billto b.cname{font-family:Georgia,serif; font-size:14px; color:var(--ink)}
+.billto .bt-r{font-size:10.5px; text-align:right; line-height:1.7; color:var(--ink-soft); min-width:40mm}
+.billto .bt-m{font-size:10.5px; line-height:1.6; border-left:1px solid var(--line-dark); padding-left:5mm; flex:1}
+
+table.items{width:100%; border-collapse:collapse; margin-top:4.5mm; font-size:10px}
+table.items thead th{
+  background:var(--ink); color:#F0E6D2; font-weight:500; letter-spacing:.08em; text-transform:uppercase;
+  font-size:8px; padding:2.5mm 1.8mm; text-align:left;
+}
+table.items thead th.r, table.items td.r{text-align:right}
+table.items thead th.c, table.items td.c{text-align:center}
+table.items tbody td{padding:1.9mm 1.8mm; border-bottom:1px solid var(--line); vertical-align:middle}
+table.items td .iname{font-weight:700; color:var(--ink); font-size:10.5px}
+table.items td .idesc{color:var(--muted); font-size:9px; margin-top:1px; line-height:1.4}
+table.items td img.ithumb{width:17mm; height:17mm; object-fit:cover; border-radius:2px; border:1px solid var(--line); display:block}
+table.items td .idel{font-size:9px; color:var(--ink-soft)}
+.tbl-cont-note{font-size:8.5px; color:var(--muted); font-style:italic; text-align:right; margin-top:1.5mm; font-family:Georgia,serif}
+.strike{text-decoration:line-through; color:var(--muted); font-size:8.5px; display:block}
+.netrate{font-weight:600}
+
+.tot-wrap{display:flex; gap:6mm; margin-top:4mm}
+.tot-left{flex:1; font-size:10px}
+.words-box{background:var(--cream); border:1px solid var(--line); padding:2.6mm 4mm; margin-bottom:2.4mm}
+.words-box .lbl{font-size:8.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--gold-deep); font-weight:700}
+.words-box .w{font-family:Georgia,serif; font-style:italic; font-size:11px; margin-top:1mm; line-height:1.5}
+.commit-grid{display:grid; grid-template-columns:1fr 1fr; gap:2mm 4mm; font-size:9.5px}
+.commit-grid .cg{border:1px solid var(--line); padding:2mm 3mm}
+.commit-grid .cg .k{font-size:8px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)}
+.commit-grid .cg .v{font-weight:600; margin-top:.5mm; color:var(--ink)}
+.tot-right{width:64mm; font-size:10.5px}
+.tot-right .tr{display:flex; justify-content:space-between; padding:1.6mm 3mm; border-bottom:1px solid var(--line)}
+.tot-right .tr .k{color:var(--ink-soft)}
+.tot-right .tr .v{font-weight:600}
+.tot-right .grand{
+  background:var(--ink); color:#F5EEDF; padding:2.8mm 3mm; display:flex; justify-content:space-between;
+  align-items:center; margin-top:1.5mm;
+}
+.tot-right .grand .k{font-size:9px; letter-spacing:.18em; text-transform:uppercase}
+.tot-right .grand .v{font-family:Georgia,serif; font-size:16px; color:#E8C888}
+
+.payrow{display:flex; gap:4mm; margin-top:2.4mm; border:1px solid var(--line); padding:2.6mm 3mm; align-items:center}
+.payrow .pay-l{flex:1}
+.payrow .lbl{font-size:8.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--gold-deep); font-weight:700; margin-bottom:1.4mm}
+.payrow table{font-size:9px; border-collapse:collapse}
+.payrow table td{padding:.5mm 0; line-height:1.35}
+.payrow table td:first-child{color:var(--muted); padding-right:4mm; white-space:nowrap}
+.payrow table td:last-child{font-weight:600}
+.payrow .qr{width:21mm; text-align:center; flex-shrink:0}
+.payrow .qr img{width:20mm; height:auto; border:1px solid var(--line); border-radius:1.2mm}
+.payrow .qr div{font-size:7px; color:var(--muted); letter-spacing:.06em; margin-top:.8mm}
+
+.terms-sig{display:flex; gap:6mm; margin-top:4mm; flex:1}
+.terms{flex:1; font-size:8.5px; color:var(--ink-soft); line-height:1.55}
+.terms .lbl{font-size:9px; letter-spacing:.18em; text-transform:uppercase; color:var(--gold-deep); font-weight:700; margin-bottom:1.5mm}
+.terms ol{padding-left:4mm}
+.terms li{margin-bottom:.6mm}
+.terms .decl{margin-top:2mm; font-style:italic; font-size:8.5px; color:var(--muted); line-height:1.5}
+.sig{width:52mm; text-align:center; display:flex; flex-direction:column; justify-content:flex-end}
+.sig .for{font-size:10px; font-weight:700; letter-spacing:.06em}
+.sig .rep{font-size:9px; color:var(--ink-soft); margin-top:1mm}
+.sig .line{border-top:1px solid var(--ink); margin-top:9mm; padding-top:1.5mm; font-size:9px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase}
+
+.foot-strip{
+  margin-top:4.5mm; background:var(--gold); color:#FFF; font-size:9px; letter-spacing:.14em;
+  text-transform:uppercase; text-align:center; padding:2.4mm; font-weight:500;
+}
+.pagefill{flex:1}
+
+/* ---- WHY OAKCRAFT page ---- */
+.p2-head{display:flex; justify-content:space-between; align-items:center}
+.p2-head img{height:14mm}
+.p2-head h2{font-family:Georgia,serif; font-weight:400; font-size:23px; letter-spacing:.3em; text-transform:uppercase}
+.p2-intro{
+  margin-top:3.5mm; font-family:Georgia,serif; font-style:italic; font-size:13px;
+  color:var(--ink-soft); text-align:center; line-height:1.6;
+}
+.stat-band{
+  margin-top:4mm; background:var(--ink); color:#F5EEDF; padding:6mm 7mm;
+  display:flex; align-items:center; gap:8mm;
+}
+.stat-band .big{font-family:Georgia,serif; font-size:52px; color:#E8C888; line-height:1; white-space:nowrap}
+.stat-band .big small{font-size:22px}
+.stat-band .txt{font-size:10.5px; line-height:1.65}
+.stat-band .txt b{color:#E8C888; letter-spacing:.14em; text-transform:uppercase; font-size:9.5px; display:block; margin-bottom:1.5mm}
+
+.sysmaster{margin-top:4.5mm; border:1px solid var(--line); background:#FFFDF9}
+.sm-head{
+  background:linear-gradient(90deg, var(--gold) 0%, #C89345 100%); color:#FFF;
+  display:flex; align-items:center; gap:4mm; padding:3mm 4.5mm;
+}
+.sm-head .sm-title{font-family:Georgia,serif; font-size:12.5px; letter-spacing:.18em; text-transform:uppercase}
+.sm-head .sm-live{
+  font-size:8px; letter-spacing:.14em; background:rgba(255,255,255,.18);
+  border:1px solid rgba(255,255,255,.5); padding:1mm 2.4mm; border-radius:10px; font-weight:700;
+}
+.sm-head .sm-live:before{content:'●'; color:#8CFF9E; margin-right:1.2mm}
+.sm-head .sm-stats{margin-left:auto; display:flex; gap:5mm; font-size:8.5px; letter-spacing:.08em; text-transform:uppercase}
+.sm-head .sm-stats b{font-family:Georgia,serif; font-size:14px; display:block; text-align:center; letter-spacing:0}
+.sm-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:2.6mm; padding:3.2mm 4mm 2.5mm}
+.sm-card{border:1px solid var(--line); border-top:2px solid var(--gold); background:#FFF; padding:2.4mm 2.8mm}
+.sm-card h4{font-size:8px; letter-spacing:.14em; text-transform:uppercase; color:var(--gold-deep); margin-bottom:1.6mm; padding-bottom:1.2mm; border-bottom:1px solid var(--cream-deep)}
+.sm-card .pr{font-size:8.6px; color:var(--ink-soft); padding:.55mm 0; line-height:1.35}
+.sm-card .pr:before{content:'●'; color:var(--live); font-size:6px; margin-right:1.6mm; vertical-align:1px}
+.sm-foot{
+  font-size:8.6px; color:var(--muted); padding:0 4mm 3mm; line-height:1.5; text-align:center;
+  font-style:italic; font-family:Georgia,serif;
+}
+
+.proof-row{display:grid; grid-template-columns:repeat(4,1fr); gap:3mm; margin-top:4.5mm}
+.proof-row .pt{border:1px solid var(--line); border-top:2.5px solid var(--gold); padding:2.6mm; text-align:center}
+.proof-row .pt .n{font-family:Georgia,serif; font-size:15px; color:var(--ink)}
+.proof-row .pt .l{font-size:8px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-top:1mm; line-height:1.45}
+
+.founder{display:flex; gap:6mm; margin-top:5mm; align-items:center}
+.fbook-wrap{width:42mm; text-align:center; flex-shrink:0}
+.fbook-wrap img{
+  width:42mm; display:block; border:1px solid var(--line);
+  box-shadow:5px 5px 0 var(--cream-deep), 5px 5px 0 1px var(--line);
+}
+.fbook-wrap .fb-badge{
+  margin-top:2.4mm; font-size:7.5px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--gold-deep); font-weight:700; line-height:1.5;
+}
+.founder .ftxt{flex:1; font-size:10.5px; line-height:1.68; color:var(--ink-soft)}
+.founder .ftxt .lbl{font-size:9.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--gold-deep); font-weight:700; margin-bottom:2.4mm}
+.fname-row{display:flex; align-items:center; gap:3.5mm; margin-bottom:2.6mm}
+.fname-row img{width:21mm; height:21mm; object-fit:cover; border-radius:2px; border:1px solid var(--line-dark)}
+.fname-row b{font-family:Georgia,serif; font-size:14.5px; color:var(--ink); display:block}
+.fname-row .frole{font-size:8.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin-top:.8mm}
+
+.gift-box{
+  margin-top:4.5mm; border:1.5px solid var(--gold); background:rgba(180,128,47,.06);
+  padding:3.2mm 5mm; text-align:center; font-family:Georgia,serif; font-size:12px; color:var(--ink);
+}
+.gift-box b{color:var(--gold-deep)}
+
+/* ============ PRINT (fallback path) ============ */
+@page{size:A4; margin:0}
+@media print{
+  body{background:#FFF}
+  #toolbar,#editor,#pdfbar,#measurePage{display:none !important}
+  #layout{padding-top:0}
+  #preview{padding:0; height:auto; overflow:visible; display:block}
+  #printArea{gap:0; display:block}
+  .page{box-shadow:none; width:210mm; min-height:296mm; margin:0}
+}
+/* ============ MOBILE ============ */
+#mobileTabs{display:none}
+.pwrap{display:contents}
+body.exporting .pwrap{display:block; height:auto !important}
+body.exporting .page{transform:none !important}
+
+@media (max-width:900px){
+  /* toolbar becomes sticky + wrapping, buttons full-width touch targets */
+  #toolbar{position:sticky; top:0; height:auto; flex-wrap:wrap; padding:10px 12px; gap:8px}
+  #toolbar .brand{font-size:15px}
+  #toolbar .brand span{display:none}
+  #toolbar .qbadge{margin-left:auto; font-size:11px; padding:4px 9px}
+  #toolbar .spacer{display:none}
+  #toolbar .btn{flex:1; padding:11px 6px; font-size:11px; letter-spacing:.08em; text-align:center}
+
+  #layout{display:block; padding-top:0}
+  #editor{
+    width:100%; min-width:0; height:auto; overflow:visible;
+    border-right:none; padding:16px 14px 110px;
+  }
+  #editor input, #editor select, #editor textarea{font-size:16px; padding:10px}
+  .addbtn{padding:13px}
+  .item-card .rm{padding:6px}
+  #preview{height:auto; overflow:visible; padding:12px 8px 110px; display:block}
+  #printArea{display:block}
+
+  /* pages scale to fit the phone width (set precisely by JS) */
+  .pwrap{display:block; margin:0 auto 14px; overflow:visible}
+  .page{transform-origin:top left; box-shadow:0 2px 14px rgba(36,26,16,.18)}
+
+  /* view switching */
+  body.mPreview #editor{display:none}
+  body:not(.mPreview) #preview{display:none}
+
+  /* bottom tab bar */
+  #mobileTabs{
+    display:flex; position:fixed; bottom:0; left:0; right:0; z-index:60;
+    background:var(--ink); border-top:1px solid rgba(217,174,95,.35);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .mtab{
+    flex:1; padding:15px 8px; background:none; border:none; color:#CDBFA5;
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase; font-family:inherit; cursor:pointer;
+  }
+  .mtab.active{color:#E8C888; box-shadow:inset 0 -3px 0 var(--gold)}
+
+  /* PDF-ready bar sits above the tabs on mobile */
+  #pdfbar{top:auto; bottom:calc(52px + env(safe-area-inset-bottom)); border-top:1px solid #BFDCC0; border-bottom:none; flex-wrap:wrap}
+}
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <div class="brand"><b>Oak</b>Craft <span style="opacity:.55">· Quotation Builder</span></div>
+  <div class="qbadge" id="tbQno">—</div>
+  <div class="spacer"></div>
+  <button class="btn" onclick="newQuotation()">＋ New Quotation</button>
+  <button class="btn" onclick="window.print()" title="Browser print fallback">Print</button>
+  <button class="btn primary" id="dlBtn" onclick="downloadPDF()">⤓ Download PDF</button>
+</div>
+
+<div id="pdfbar">
+  <span id="pdfmsg">✓ PDF generated.</span>
+  <a id="pdfOpen" target="_blank" rel="noopener">Open PDF</a>
+  <span style="opacity:.75">— if the download didn't start automatically, open it here and save.</span>
+  <button class="close" onclick="document.getElementById('pdfbar').classList.remove('show')">✕</button>
+</div>
+
+<div id="mobileTabs">
+  <button class="mtab active" id="tabEdit" onclick="setView('edit')">&#9998;&nbsp; Edit Details</button>
+  <button class="mtab" id="tabPrev" onclick="setView('preview')">&#128196;&nbsp; Preview Invoice</button>
+</div>
+
+<div id="layout">
+<!-- ================= EDITOR ================= -->
+<aside id="editor">
+
+  <div class="ed-sec">
+    <h3>Quotation</h3>
+    <div class="frow">
+      <div class="f"><label>Number (auto — editable)</label><input type="number" id="inQno" oninput="S.qno=parseInt(this.value)||S.qno; R()"></div>
+      <div class="f"><label>Date</label><input type="date" id="inDate" oninput="S.date=this.value; dateManual=true; R()"></div>
+    </div>
+    <div class="frow">
+      <div class="f"><label>Valid for (days)</label><input type="number" id="inValid" value="15" oninput="S.valid=parseInt(this.value)||15; R()"></div>
+      <div class="f"><label>GST rate %</label><input type="number" id="inGst" value="18" oninput="S.gst=parseFloat(this.value)||0; R()"></div>
+    </div>
+    <div class="frow">
+      <div class="f"><label>Representative <b>*</b></label><select id="inRepSel" onchange="repSelect(this.value)"></select></div>
+      <div class="f"><label>Representative number <b>*</b></label><input id="inRepPh" placeholder="+91 …" oninput="S.repPh=this.value; this.classList.remove('err'); R()"></div>
+    </div>
+    <div class="f" id="repNameWrap" style="display:none"><label>New representative name <b>*</b></label><input id="inRep" placeholder="Full name" oninput="S.rep=this.value; this.classList.remove('err'); R()"></div>
+    <div class="hint">Your name and direct number print on the quotation — the client should always know whom to call. Both are required before the PDF can be generated.</div>
+    <div class="hint" id="storeStatus">Connecting to shared numbering…</div>
+  </div>
+
+  <div class="ed-sec">
+    <h3>Client · Bill To</h3>
+    <div class="f"><label>Company / Client name</label><input id="inCo" oninput="S.co=this.value; R()"></div>
+    <div class="f"><label>Kind attention (contact person)</label><input id="inAttn" oninput="S.attn=this.value; R()"></div>
+    <div class="f"><label>Address</label><textarea id="inAddr" rows="2" oninput="S.addr=this.value; R()"></textarea></div>
+    <div class="frow">
+      <div class="f"><label>Client GSTIN (optional)</label><input id="inCGst" oninput="S.cgstin=this.value; R()"></div>
+      <div class="f"><label>Phone</label><input id="inCPh" oninput="S.cph=this.value; R()"></div>
+    </div>
+    <div class="f"><label>Ship to (optional — only if delivery address differs from billing)</label><textarea id="inShip" rows="2" placeholder="Site / delivery address" oninput="S.shipTo=this.value; R()"></textarea></div>
+    <div class="f"><label>Place of supply (state) — drives GST split</label>
+      <select id="inState" onchange="S.state=this.value; R()"></select>
+    </div>
+  </div>
+
+  <div class="ed-sec">
+    <h3>Products</h3>
+    <div id="itemsEd"></div>
+    <button class="addbtn" onclick="addItem()">＋ Add Product</button>
+    <div class="hint">Add any number of products — the invoice automatically flows onto extra pages when needed. HSN defaults to 9403 and can be changed per line.</div>
+  </div>
+
+  <div class="ed-sec">
+    <h3>Charges & Commitments</h3>
+    <div class="frow">
+      <div class="f"><label>Freight</label>
+        <select id="inFrMode" onchange="S.freightMode=this.value; document.getElementById('frAmtWrap').style.display=(this.value==='amount'?'':'none'); R()">
+          <option value="none">Don't mention</option>
+          <option value="included">Included in price</option>
+          <option value="extra">Extra — at actuals</option>
+          <option value="amount">Add freight amount (₹)</option>
+        </select>
+      </div>
+      <div class="f"><label>Warranty</label><input id="inWar" oninput="S.warranty=this.value; R()"></div>
+    </div>
+    <div class="f" id="frAmtWrap" style="display:none"><label>Freight amount (₹, ex-GST — added to taxable value)</label><input type="number" id="inFreight" value="0" oninput="S.freight=parseFloat(this.value)||0; R()"></div>
+    <div class="f"><label>Payment terms</label><input id="inPay" oninput="S.payTerms=this.value; R()"></div>
+    <div class="f"><label>Terms & conditions (one per line)</label><textarea id="inTerms" rows="6" oninput="S.terms=this.value; R()"></textarea></div>
+  </div>
+
+</aside>
+
+<!-- ================= PREVIEW ================= -->
+<main id="preview">
+  <div id="printArea"></div>
+</main>
+</div>
+
+<!-- hidden measuring page (identical styles, never printed) -->
+<div class="page" id="measurePage" aria-hidden="true"></div>
+
+<script>
+/* ================= EMBEDDED BRAND ASSETS ================= */
+const IMG = {
+  logo: "data:image/png;base64,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",
+  qr: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMYAAADGAQAAAACh4MLwAAABkUlEQVR4nO2YsW0cQQxF3xwPUMjtQKXMdqCSDHc2V4o64IYGuPgKuLIN2E6cHAMxGCyXyQM5nyRmiL/beftHAL4igALA4nJNlciZz2e7wZSES1qmdY7dJEWTvE2YpiXJAqszmuQNgGM/t8f5qj8jz2crO8a5PZfgd7sDgjvT3t90bHnfcXF0YLvBY4xRlHfmS3COMbYObHdcAMfDII+HQd25Br0XxSypwpRW+qqfTXR6vq4Ei8c5vllgwbl1qCkKJMFMF75MutwebMmUlmLWN64eNUWSadXMwldCcfZgW/hKV8nBJJht2ARYkL7wpZjpq8c8rQqSLgsSTEpXdtKCxZSWtBLSl6Q2bNeGybVbzi55k0oI6craMLvsb0hSkL4Us5qJRZOZRQkBV+kUuHLYga0sZp0WU0GfmQVYUAWlNNulplOSSdU9klnTvwlb5ap6bwLQ4759Rvx7+rq7TCt9vbzvDfa3n5HJsXOMcn5sHXbLG7WK8BjbNC2O/Xp/eD7bL50m4EvxOe6fzza+3rj+K/IB6uBEC6b7SN8AAAAASUVORK5CYII=",
+  book: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='420' height='560'><rect width='420' height='560' fill='%23241A10'/><rect x='20' y='20' width='380' height='520' fill='none' stroke='%23B4802F' stroke-width='3'/><text x='210' y='250' text-anchor='middle' fill='%23E8C888' font-family='Georgia' font-size='34'>MORE THAN</text><text x='210' y='300' text-anchor='middle' fill='%23E8C888' font-family='Georgia' font-size='34'>A CHAIR</text><text x='210' y='360' text-anchor='middle' fill='%23CDBFA5' font-family='Georgia' font-size='18'>Vishu Mittal</text></svg>",
+  launch: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><rect width='200' height='200' fill='%23F7F2E9'/><circle cx='100' cy='80' r='34' fill='%23B4802F'/><rect x='55' y='125' width='90' height='50' rx='10' fill='%23B4802F'/></svg>"
+};
+
+const CO = {
+  name: "Oakcraft",
+  addr: "Plot No. 400, Khasra No. 154/400, Ground & First Floor, Poothkhurd, Near Petu Ram Hotel, North West Delhi — 110039, India",
+  gstin: "07ABOPM2275Q1ZV",
+  pan: "ABOPM2275Q",
+  stateName: "Delhi, Code: 07",
+  email: "accounts@oakcraft.in",
+  bank: { holder:"Oakcraft", bank:"Kotak Mahindra Bank", ac:"8700545550", branch:"Rohini", ifsc:"KKBK0000197", upi:"oakcraft@kotak" }
+};
+
+const EMP = [
+  ["Amira Sheikh","8800848890"],
+  ["Niti Kumari","9910759285"],
+  ["Ujala Rajput","7827554727"],
+  ["Mayank Mittal","9910566422"],
+  ["Vishu Mittal","8700545550"],
+  ["Heena Kashyap","9319140265"]
+];
+
+const STATES = ["Delhi","Haryana","Uttar Pradesh","Punjab","Rajasthan","Himachal Pradesh","Uttarakhand","Chandigarh","Jammu & Kashmir","Gujarat","Maharashtra","Madhya Pradesh","Chhattisgarh","Bihar","Jharkhand","West Bengal","Odisha","Assam","Karnataka","Kerala","Tamil Nadu","Telangana","Andhra Pradesh","Goa","Sikkim","Arunachal Pradesh","Nagaland","Manipur","Mizoram","Tripura","Meghalaya","Puducherry","Andaman & Nicobar","Ladakh","Dadra & Nagar Haveli and Daman & Diu","Lakshadweep"];
+
+const SYS = {
+  stats: [["9","Departments"],["50","Live Processes"],["48","Active Links"]],
+  cards: [
+    ["Operations", ["O2D FMS v3 — Order to Dispatch","Production FMS","Daily Production Plan","PC Dashboard"]],
+    ["Store & Inventory", ["IMS v3 — Inventory Management","Purchase FMS","Full Kitting Sheet","Inward Raw Material FMS"]],
+    ["MIS & Quality", ["Daily Checklist — every dept","MIS Reporting","SCT FMS"]],
+    ["Sales & CRM", ["Sales CRM","Sales Enquiry FMS","Complaint Resolution FMS","Rep Scorecards — per caller"]],
+    ["Accounts", ["Vendor Software","Bidding FMS","PO Folder & Billing Systems"]],
+    ["Packaging & Dispatch", ["Packing & Dispatch FMS","Returns Software","Online Dispatch FMS"]]
+  ]
+};
+
+/* ================= STATE ================= */
+function fyPrefix(d){
+  const y = d.getFullYear()%100, m = d.getMonth()+1;
+  return m>=4 ? `${y}-${y+1}` : `${y-1}-${y}`;
+}
+const today = new Date();
+const FY = fyPrefix(today);
+const STORE_KEY = 'oakcraft-qno-' + FY;
+
+let S = {
+  qno: 1001, date: today.toISOString().slice(0,10), valid: 15, gst: 18,
+  rep: "", repPh: "",
+  co: "", attn: "", addr: "", cgstin: "", cph: "", state: "Delhi", shipTo: "",
+  items: [], freight: 0, freightMode: "none",
+  warranty: "1 Year — manufacturing defects",
+  payTerms: "40% advance with PO · Balance before dispatch",
+  terms: [
+    "All prices are in INR and exclusive of GST unless stated otherwise.",
+    "Payment: 40% advance along with the purchase order; remaining balance before dispatch.",
+    "This pro forma is valid for the period stated above; prices may be revised thereafter.",
+    "Delivery timelines count from realisation of advance payment.",
+    "Warranty covers manufacturing defects; service on a replacement-over-repair basis.",
+    "Unloading and site access to be arranged by the client unless agreed in writing.",
+    "Subject to Delhi jurisdiction. E.&O.E."
+  ].join("\n")
+};
+let numberReserved = false;
+let dateManual = false;
+let lastPdfUrl = null;
+
+/* ================= SHARED AUTO-NUMBERING ================= */
+async function initNumber(){
+  const el = document.getElementById('storeStatus');
+  try{
+    let last = 1000;
+    try{
+      const r = await window.storage.get(STORE_KEY, true);
+      if(r && r.value) last = parseInt(JSON.parse(r.value)) || 1000;
+    }catch(e){ /* key doesn't exist yet */ }
+    S.qno = last + 1;
+    el.textContent = `Shared team numbering active — next number is ${fmtQno()} (FY ${FY}). It is reserved when you download the PDF.`;
+    el.style.color = 'var(--ok)';
+  }catch(e){
+    el.textContent = 'Shared numbering unavailable here — enter the number manually.';
+  }
+  syncInputs(); R();
+}
+async function reserveNumber(){
+  if(numberReserved) return;
+  try{
+    let last = 1000;
+    try{
+      const r = await window.storage.get(STORE_KEY, true);
+      if(r && r.value) last = parseInt(JSON.parse(r.value)) || 1000;
+    }catch(e){}
+    if(last >= S.qno) S.qno = last + 1;
+    await window.storage.set(STORE_KEY, JSON.stringify(S.qno), true);
+    numberReserved = true;
+    syncInputs();
+  }catch(e){ /* offline — keep manual number */ }
+}
+
+/* ================= HELPERS ================= */
+const fmtQno = () => `OAK/${FY}/${S.qno}`;
+const inr = n => '₹ ' + n.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+const inr0 = n => '₹ ' + Math.round(n).toLocaleString('en-IN');
+
+function numToWordsIndian(num){
+  num = Math.round(num);
+  if(num === 0) return 'Zero';
+  const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+  const b = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+  const two = n => n<20 ? a[n] : b[Math.floor(n/10)] + (n%10 ? ' '+a[n%10] : '');
+  const three = n => (n>99 ? a[Math.floor(n/100)]+' Hundred'+(n%100?' ':'') : '') + (n%100 ? two(n%100) : '');
+  let out = '';
+  const crore = Math.floor(num/1e7); num %= 1e7;
+  const lakh = Math.floor(num/1e5); num %= 1e5;
+  const thou = Math.floor(num/1e3); num %= 1e3;
+  if(crore) out += three(crore)+' Crore ';
+  if(lakh) out += three(lakh)+' Lakh ';
+  if(thou) out += three(thou)+' Thousand ';
+  if(num) out += three(num);
+  return out.trim();
+}
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmtDate(iso){
+  if(!iso) return '';
+  const d = new Date(iso+'T00:00:00');
+  return d.toLocaleDateString('en-IN',{day:'2-digit', month:'short', year:'numeric'});
+}
+function validUntil(){
+  const d = new Date(S.date+'T00:00:00'); d.setDate(d.getDate()+S.valid);
+  return d.toLocaleDateString('en-IN',{day:'2-digit', month:'short', year:'numeric'});
+}
+
+/* ================= ITEMS ================= */
+function addItem(){
+  S.items.push({photo:null, name:"", desc:"", hsn:"9403", qty:1, price:0, disc:0, del:"10–12 working days"});
+  renderItemsEditor(); R();
+}
+function rmItem(i){ S.items.splice(i,1); renderItemsEditor(); R(); }
+function updItem(i, k, v){
+  S.items[i][k] = (k==='qty'||k==='price'||k==='disc') ? (parseFloat(v)||0) : v;
+  R();
+}
+function photoUpload(i, input){
+  const file = input.files[0]; if(!file) return;
+  const rd = new FileReader();
+  rd.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 420;
+      const sc = Math.min(1, MAX/Math.max(img.width, img.height));
+      const cv = document.createElement('canvas');
+      cv.width = img.width*sc; cv.height = img.height*sc;
+      cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+      S.items[i].photo = cv.toDataURL('image/jpeg', .82);
+      renderItemsEditor(); R();
+    };
+    img.src = e.target.result;
+  };
+  rd.readAsDataURL(file);
+}
+function renderItemsEditor(){
+  const w = document.getElementById('itemsEd');
+  w.innerHTML = S.items.map((it,i)=>`
+    <div class="item-card">
+      <div class="ic-head"><span>PRODUCT ${String(i+1).padStart(2,'0')}</span><button class="rm" onclick="rmItem(${i})">Remove</button></div>
+      <div class="f"><input placeholder="Model name — e.g. Hurricane HB Mesh" value="${esc(it.name)}" oninput="updItem(${i},'name',this.value)"></div>
+      <div class="f"><input placeholder="Short description / specs (optional)" value="${esc(it.desc)}" oninput="updItem(${i},'desc',this.value)"></div>
+      <div class="frow">
+        <div class="f"><label>HSN</label><input value="${esc(it.hsn)}" oninput="updItem(${i},'hsn',this.value)"></div>
+        <div class="f"><label>Qty</label><input type="number" min="1" value="${it.qty}" oninput="updItem(${i},'qty',this.value)"></div>
+      </div>
+      <div class="frow">
+        <div class="f"><label>List price (₹, ex-GST)</label><input type="number" value="${it.price||''}" oninput="updItem(${i},'price',this.value)"></div>
+        <div class="f"><label>Discount %</label><input type="number" min="0" max="100" value="${it.disc||''}" oninput="updItem(${i},'disc',this.value)"></div>
+      </div>
+      <div class="f"><label>Delivery timeline</label><input value="${esc(it.del)}" oninput="updItem(${i},'del',this.value)"></div>
+      <div class="photo-drop">
+        ${it.photo ? `<img src="${it.photo}" alt="">` : `<div class="ph-empty">＋</div>`}
+        <input type="file" accept="image/*" onchange="photoUpload(${i},this)">
+      </div>
+    </div>`).join('');
+}
+
+/* ================= CALC ================= */
+function calc(){
+  let sub = 0;
+  const rows = S.items.map(it=>{
+    const net = it.price * (1 - (it.disc||0)/100);
+    const amt = net * it.qty;
+    sub += amt;
+    return {...it, net, amt};
+  });
+  const fr = S.freightMode==='amount' ? (S.freight||0) : 0;
+  const taxable = sub + fr;
+  const isDelhi = S.state === 'Delhi';
+  const cgst = isDelhi ? taxable * S.gst/200 : 0;
+  const sgst = isDelhi ? taxable * S.gst/200 : 0;
+  const igst = isDelhi ? 0 : taxable * S.gst/100;
+  const pre = taxable + cgst + sgst + igst;
+  const grand = Math.round(pre);
+  const roundoff = grand - pre;
+  return {rows, sub, fr, taxable, isDelhi, cgst, sgst, igst, roundoff, grand};
+}
+
+/* ================= HTML BUILDERS ================= */
+function rowHTML(it, i){
+  return `<tr>
+    <td class="c" style="width:5mm; color:var(--muted)">${i+1}</td>
+    <td style="width:16mm">${it.photo?`<img class="ithumb" src="${it.photo}" alt="">`:''}</td>
+    <td><div class="iname">${esc(it.name)||'—'}</div>${it.desc?`<div class="idesc">${esc(it.desc)}</div>`:''}</td>
+    <td class="c" style="width:11mm">${esc(it.hsn)}</td>
+    <td class="c" style="width:9mm">${it.qty}</td>
+    <td class="c" style="width:20mm"><span class="idel">${esc(it.del)}</span></td>
+    <td class="r" style="width:20mm">
+      ${it.disc>0?`<span class="strike">${inr(it.price)}</span><span class="netrate">${inr(it.net)}</span>`:`<span class="netrate">${inr(it.price)}</span>`}
+    </td>
+    <td class="r" style="width:22mm"><b>${inr(it.amt)}</b></td>
+  </tr>`;
+}
+const THEAD = `<thead><tr>
+  <th class="c">#</th><th>Image</th><th>Item & Description</th><th class="c">HSN</th>
+  <th class="c">Qty</th><th class="c">Delivery</th><th class="r">Rate (₹)</th><th class="r">Amount (₹)</th>
+</tr></thead>`;
+
+function fullHeadHTML(pageInfo){
+  return `
+  <div class="doc-head">
+    <img class="logo" src="${IMG.logo}" alt="OakCraft">
+    <div class="doc-title">
+      <h1>Pro Forma Invoice</h1>
+      <div class="qno">${fmtQno()}</div>
+      <div class="dsub">Date: ${fmtDate(S.date)} · Valid until: ${validUntil()}${pageInfo?' · '+pageInfo:''}</div>
+    </div>
+  </div>
+  <div class="gold-rule"></div>
+  <div class="meta-band">
+    <div class="from-block">
+      <b>${CO.name}</b> — Manufacturer of Premium Office Seating<br>
+      ${CO.addr}<br>
+      GSTIN/UIN: <b style="font-size:10.5px">${CO.gstin}</b> · PAN: ${CO.pan} · State: ${CO.stateName}<br>
+      ${CO.email} · oakcraft.in
+    </div>
+    <div class="meta-grid">
+      <div class="k">Place of supply</div><div class="v">${esc(S.state)}</div>
+      <div class="k">Tax type</div><div class="v">${S.state==='Delhi'?'CGST + SGST':'IGST'}</div>
+      <div class="k">Representative</div><div class="v">${esc(S.rep)||'—'}</div>
+      <div class="k">Direct line</div><div class="v">${esc(S.repPh)||'—'}</div>
+    </div>
+  </div>
+  <div class="billto">
+    <div class="bt-l">
+      <div class="lbl">Bill To</div>
+      <b class="cname">${esc(S.co)||'Client name'}</b><br>
+      ${S.attn?`Kind Attn: ${esc(S.attn)}<br>`:''}
+      ${esc(S.addr).replace(/\n/g,'<br>')||''}
+    </div>
+    ${S.shipTo.trim()?`<div class="bt-m"><div class="lbl">Ship To</div>${esc(S.shipTo).replace(/\n/g,'<br>')}</div>`:''}
+    <div class="bt-r">
+      ${S.cgstin?`GSTIN: <b>${esc(S.cgstin)}</b><br>`:''}
+      ${S.cph?`Phone: ${esc(S.cph)}<br>`:''}
+      State: ${esc(S.state)}
+    </div>
+  </div>`;
+}
+function contHeadHTML(pageInfo){
+  return `
+  <div class="cont-head">
+    <img src="${IMG.logo}" alt="OakCraft">
+    <div class="ct">
+      <div class="t">Pro Forma Invoice · Continued</div>
+      <div class="s">${fmtQno()} · ${pageInfo}</div>
+    </div>
+  </div>
+  <div class="gold-rule"></div>`;
+}
+function totalsMainHTML(C){
+  const taxRows = C.isDelhi
+    ? `<div class="tr"><span class="k">CGST @ ${S.gst/2}%</span><span class="v">${inr(C.cgst)}</span></div>
+       <div class="tr"><span class="k">SGST @ ${S.gst/2}%</span><span class="v">${inr(C.sgst)}</span></div>`
+    : `<div class="tr"><span class="k">IGST @ ${S.gst}%</span><span class="v">${inr(C.igst)}</span></div>`;
+  return `
+  <div class="tot-wrap">
+    <div class="tot-left">
+      <div class="words-box">
+        <div class="lbl">Amount in words</div>
+        <div class="w">Indian Rupees ${numToWordsIndian(C.grand)} Only</div>
+      </div>
+      <div class="commit-grid">
+        <div class="cg"><div class="k">Warranty</div><div class="v">${esc(S.warranty)}</div></div>
+        <div class="cg"><div class="k">Payment terms</div><div class="v">${esc(S.payTerms)}</div></div>
+      </div>
+      <div class="payrow">
+        <div class="pay-l">
+          <div class="lbl">Payment Details</div>
+          <table>
+            <tr><td>Account holder</td><td>${CO.bank.holder} · ${CO.bank.bank}</td></tr>
+            <tr><td>Account no.</td><td>${CO.bank.ac}</td></tr>
+            <tr><td>Branch & IFSC</td><td>${CO.bank.branch} · ${CO.bank.ifsc}</td></tr>
+            <tr><td>UPI</td><td>${CO.bank.upi}</td></tr>
+          </table>
+        </div>
+        <div class="qr">
+          <img src="${IMG.qr}" alt="UPI QR">
+          <div>SCAN TO PAY · UPI</div>
+        </div>
+      </div>
+    </div>
+    <div class="tot-right">
+      <div class="tr"><span class="k">Subtotal</span><span class="v">${inr(C.sub)}</span></div>
+      ${S.freightMode==='included' ? `<div class="tr"><span class="k">Freight & handling</span><span class="v">Included</span></div>` : ''}
+      ${S.freightMode==='extra' ? `<div class="tr"><span class="k">Freight & handling</span><span class="v">Extra, at actuals</span></div>` : ''}
+      ${S.freightMode==='amount' ? `<div class="tr"><span class="k">Freight & handling</span><span class="v">${inr(C.fr)}</span></div>` : ''}
+      <div class="tr"><span class="k">Taxable value</span><span class="v">${inr(C.taxable)}</span></div>
+      ${taxRows}
+      <div class="tr"><span class="k">Round off</span><span class="v">${C.roundoff>=0?'+':'−'} ${Math.abs(C.roundoff).toFixed(2)}</span></div>
+      <div class="grand"><span class="k">Grand Total</span><span class="v">${inr0(C.grand)}</span></div>
+    </div>
+  </div>`;
+}
+function termsSigHTML(){
+  return `
+  <div class="terms-sig" style="flex:0 0 auto">
+    <div class="terms">
+      <div class="lbl">Terms & Conditions</div>
+      <ol>${S.terms.split('\n').filter(t=>t.trim()).map(t=>`<li>${esc(t)}</li>`).join('')}</ol>
+      <div class="decl">Declaration: We declare that this pro forma invoice shows the actual price of the goods described and that all particulars are true and correct. This is a computer-generated document.</div>
+    </div>
+    <div class="sig">
+      <div class="for">For ${CO.name}</div>
+      ${S.rep?`<div class="rep">${esc(S.rep)}${S.repPh?' · '+esc(S.repPh):''}</div>`:''}
+      <div class="line">Authorised Signatory</div>
+    </div>
+  </div>`;
+}
+function totalsHTML(C){ return totalsMainHTML(C) + termsSigHTML(); }
+function whyHTML(){
+  const smCards = SYS.cards.map(([title, procs])=>`
+    <div class="sm-card"><h4>${title}</h4>${procs.map(p=>`<div class="pr">${p}</div>`).join('')}</div>
+  `).join('');
+  return `
+  <div class="p2-head">
+    <img src="${IMG.logo}" alt="OakCraft">
+    <h2>Why OakCraft</h2>
+  </div>
+  <div class="gold-rule"></div>
+  <div class="p2-intro">Most vendors ask you to trust them. We built systems so you don't have to.</div>
+  <div class="stat-band">
+    <div class="big">84.3<small>%</small></div>
+    <div class="txt">
+      <b>On-Time Delivery — Measured, Not Estimated</b>
+      Every dispatch at OakCraft is tracked through our live Flow Management Systems, from purchase order to your doorstep. 84.3% is our audited on-time rate across all orders — a number most vendors cannot quote, because most vendors do not measure. What gets measured gets delivered.
+    </div>
+  </div>
+  <div class="sysmaster">
+    <div class="sm-head">
+      <span class="sm-title">OakCraft System Master</span>
+      <span class="sm-live">Live</span>
+      <div class="sm-stats">${SYS.stats.map(([n,l])=>`<div><b>${n}</b>${l}</div>`).join('')}</div>
+    </div>
+    <div class="sm-grid">${smCards}</div>
+    <div class="sm-foot">Every process above runs live, with a named owner and a named problem-solver — your order's status is a fact, not an opinion.</div>
+  </div>
+  <div class="proof-row">
+    <div class="pt"><div class="n">3,000 sqm</div><div class="l">Own manufacturing facility, Delhi NCR</div></div>
+    <div class="pt"><div class="n">100+</div><div class="l">Team members building every chair in-house</div></div>
+    <div class="pt"><div class="n">500+</div><div class="l">Livelihoods supported by our factory ecosystem</div></div>
+    <div class="pt"><div class="n">Replacement</div><div class="l">Over repair — our after-sales promise</div></div>
+  </div>
+  <div class="founder">
+    <div class="fbook-wrap">
+      <img src="${IMG.book}" alt="More Than a Chair — book cover">
+      <div class="fb-badge">World's First & Only Book<br>on Seating & Performance</div>
+    </div>
+    <div class="ftxt">
+      <div class="lbl">From the Founder's Desk</div>
+      <div class="fname-row">
+        <img src="${IMG.launch}" alt="Vishu Mittal with his mentor at the book launch">
+        <div><b>Vishu Mittal</b><div class="frole">Founder & CEO · #StartingAt17</div></div>
+      </div>
+      Vishu started OakCraft at 17, on the factory floor — and built it into a manufacturer-direct seating brand trusted by businesses across India. He is the author of <i>More Than a Chair</i>: how the chair your team sits on shapes their productivity, health and work. When you buy from OakCraft, you deal with the manufacturer — no middlemen, no markups, no excuses.
+    </div>
+  </div>
+  <div class="gift-box">A signed copy of <b>More Than a Chair</b> accompanies this quotation — with our compliments.</div>
+  <div class="foot-strip" style="margin-top:auto">oakcraft.in · ${CO.email} · Bawana, Delhi NCR</div>`;
+}
+
+/* ================= PAGINATION (measurement-driven) ================= */
+function paginate(C){
+  const M = document.getElementById('measurePage');
+  const pxmm = M.getBoundingClientRect().width / 210;
+  const cs = getComputedStyle(M);
+  const padT = parseFloat(cs.paddingTop), padB = parseFloat(cs.paddingBottom);
+  const innerH = 296*pxmm - padT - padB - 1*pxmm;   // 1mm safety margin
+
+  const rowsArr = C.rows.length ? C.rows.map(rowHTML)
+    : [`<tr><td colspan="8" style="text-align:center; color:var(--muted); padding:8mm">Add products from the panel on the left</td></tr>`];
+
+  /* pass 1: measure header, each row, and each bottom block separately */
+  M.innerHTML = fullHeadHTML('')
+    + `<table class="items" id="mTbl">${THEAD}<tbody>${rowsArr.join('')}</tbody></table>`
+    + `<div id="mB1">${totalsMainHTML(C)}</div>`
+    + `<div id="mB2">${termsSigHTML()}</div>`
+    + `<div class="foot-strip" id="mFoot">x</div>`;
+  const mTop = M.getBoundingClientRect().top + padT;
+  const tbl = M.querySelector('#mTbl');
+  const trs = [...tbl.querySelectorAll('tbody tr')];
+  const headH = tbl.getBoundingClientRect().top - mTop;                    // full header incl. margins
+  const theadH = trs[0].getBoundingClientRect().top - tbl.getBoundingClientRect().top;
+  const rowH = trs.map((tr,i)=> (i<trs.length-1 ? trs[i+1].getBoundingClientRect().top : tbl.getBoundingClientRect().bottom) - tr.getBoundingClientRect().top);
+  const b1 = M.querySelector('#mB1'), b2 = M.querySelector('#mB2'), ft = M.querySelector('#mFoot');
+  const b1H = b1.getBoundingClientRect().bottom - tbl.getBoundingClientRect().bottom;  // incl. top margin
+  const b2H = b2.getBoundingClientRect().bottom - b1.getBoundingClientRect().bottom;   // incl. top margin
+  const footH = ft.getBoundingClientRect().bottom - b2.getBoundingClientRect().bottom; // pinned footer
+
+  /* pass 2: continuation header height */
+  M.innerHTML = contHeadHTML('Page 2') + `<table class="items" id="mTbl2">${THEAD}</table>`;
+  const contH = M.querySelector('#mTbl2').getBoundingClientRect().top - (M.getBoundingClientRect().top + padT);
+
+  M.innerHTML = '';
+
+  /* greedy packing — rows first, then the bottom blocks flow continuously:
+     whatever fits stays on the current page; only the overflow moves on */
+  const pages = [];
+  let cur = {cont:false, rows:[], blocks:[]};
+  let cap = innerH - headH - theadH - footH;
+  let used = 0;
+  rowsArr.forEach((_, i)=>{
+    if(used + rowH[i] > cap && cur.rows.length){
+      pages.push(cur);
+      cur = {cont:true, rows:[], blocks:[]};
+      cap = innerH - contH - theadH - footH;
+      used = 0;
+    }
+    cur.rows.push(i); used += rowH[i];
+  });
+  let remain = cap - used;
+  [['tot', b1H], ['terms', b2H]].forEach(([key, h])=>{
+    if(h > remain && (cur.rows.length || cur.blocks.length)){
+      pages.push(cur);
+      cur = {cont:true, rows:[], blocks:[]};
+      remain = innerH - contH - footH;
+    }
+    cur.blocks.push(key); remain -= h;
+  });
+  pages.push(cur);
+  return {pages, rowsArr};
+}
+
+/* ================= RENDER ================= */
+function R(){
+  document.getElementById('tbQno').textContent = fmtQno();
+  const C = calc();
+  const {pages, rowsArr} = paginate(C);
+  const totalPages = pages.length + 1;   // + WHY OAKCRAFT
+
+  let html = '';
+  pages.forEach((p, idx)=>{
+    const pageInfo = `Page ${idx+1} of ${totalPages}`;
+    let inner = p.cont ? contHeadHTML(pageInfo) : fullHeadHTML(totalPages>2?pageInfo:'');
+    if(p.rows.length){
+      inner += `<table class="items">${THEAD}<tbody>${p.rows.map(i=>rowsArr[i]).join('')}</tbody></table>`;
+      const isLastRowPage = p.rows[p.rows.length-1] === rowsArr.length-1;
+      if(!isLastRowPage) inner += `<div class="tbl-cont-note">Continued on next page…</div>`;
+    }
+    (p.blocks || []).forEach(b=>{ inner += (b==='tot') ? totalsMainHTML(C) : termsSigHTML(); });
+    if(idx < pages.length-1 && (!p.rows.length || p.rows[p.rows.length-1] === rowsArr.length-1) && (p.blocks||[]).length < 2 && !(p.blocks||[]).includes('terms')){
+      inner += `<div class="tbl-cont-note">Continued on next page…</div>`;
+    }
+    inner += `<div class="pagefill"></div><div class="foot-strip">oakcraft.in · ${CO.email} · Manufacturer-Direct Since Day One</div>`;
+    html += `<div class="pwrap"><div class="page inv-page">${inner}</div></div>`;
+  });
+  html += `<div class="pwrap"><div class="page" id="pageWhy">${whyHTML()}</div></div>`;
+  document.getElementById('printArea').innerHTML = html;
+  fitPreview();
+}
+
+/* ================= MOBILE FIT & VIEWS ================= */
+const isMobile = () => window.matchMedia('(max-width:900px)').matches;
+function fitPreview(){
+  const mobile = isMobile() && !document.body.classList.contains('exporting');
+  document.querySelectorAll('#printArea .pwrap').forEach(w=>{
+    const p = w.querySelector('.page');
+    if(mobile){
+      const avail = w.clientWidth || document.getElementById('preview').clientWidth - 16;
+      if(avail > 0 && p.offsetWidth > 0){
+        const sc = Math.min(1, avail / p.offsetWidth);
+        p.style.transform = `scale(${sc})`;
+        w.style.height = (p.offsetHeight * sc) + 'px';
+      }
+    }else{
+      p.style.transform = ''; w.style.height = '';
+    }
+  });
+}
+function setView(v){
+  document.body.classList.toggle('mPreview', v === 'preview');
+  document.getElementById('tabEdit').classList.toggle('active', v === 'edit');
+  document.getElementById('tabPrev').classList.toggle('active', v === 'preview');
+  if(v === 'preview'){ fitPreview(); window.scrollTo({top:0}); }
+}
+window.addEventListener('resize', fitPreview);
+window.addEventListener('orientationchange', ()=> setTimeout(fitPreview, 250));
+
+/* ================= ACTIONS ================= */
+function repSelect(v){
+  const wrap = document.getElementById('repNameWrap');
+  document.getElementById('inRepSel').classList.remove('err');
+  if(v === '__other'){
+    wrap.style.display = '';
+    S.rep = document.getElementById('inRep').value || '';
+    document.getElementById('inRep').focus();
+  }else if(v === ''){
+    wrap.style.display = 'none'; S.rep = '';
+  }else{
+    wrap.style.display = 'none';
+    S.rep = v;
+    const emp = EMP.find(e=>e[0]===v);
+    if(emp){ S.repPh = emp[1]; document.getElementById('inRepPh').value = emp[1]; document.getElementById('inRepPh').classList.remove('err'); }
+  }
+  R();
+}
+function repMissing(){
+  let missing = false;
+  if(!S.rep.trim()){
+    document.getElementById('inRepSel').classList.add('err');
+    if(document.getElementById('repNameWrap').style.display !== 'none') document.getElementById('inRep').classList.add('err');
+    missing = true;
+  }
+  if(!S.repPh.trim()){ document.getElementById('inRepPh').classList.add('err'); missing = true; }
+  if(missing){
+    const st = document.getElementById('storeStatus');
+    st.textContent = 'Please add your name and direct number — they print on the quotation so the client knows whom to call.';
+    st.className = 'hint warn';
+    document.getElementById('inRep').scrollIntoView({behavior:'smooth', block:'center'});
+  }
+  return missing;
+}
+
+async function downloadPDF(){
+  if(repMissing()) return;
+  const btn = document.getElementById('dlBtn');
+  btn.disabled = true; btn.textContent = 'Preparing PDF…';
+  try{
+    if(typeof html2pdf === 'undefined'){
+      const bar = document.getElementById('pdfbar');
+      bar.classList.add('show');
+      document.getElementById('pdfmsg').textContent = 'PDF engine could not load in this viewer — use the Print button and choose "Save as PDF" instead.';
+      document.getElementById('pdfOpen').style.display = 'none';
+      return;
+    }
+    document.getElementById('pdfOpen').style.display = '';
+    document.getElementById('pdfmsg').textContent = '✓ PDF generated.';
+    if(!dateManual){ S.date = new Date().toISOString().slice(0,10); syncInputs(); }
+    await reserveNumber();
+    R();
+    const fname = `OakCraft-ProForma-OAK-${FY}-${S.qno}.pdf`;
+    document.body.classList.add('exporting');
+
+    /* render EACH page separately — one page element = exactly one PDF page */
+    const pageEls = [...document.querySelectorAll('#printArea .page')];
+    let pdf = null;
+    for(let i=0; i<pageEls.length; i++){
+      if(i === 0){
+        pdf = await html2pdf().set({
+          margin: 0,
+          image: {type:'jpeg', quality:0.92},
+          html2canvas: {scale:2, useCORS:true, logging:false},
+          jsPDF: {unit:'mm', format:'a4', orientation:'portrait'},
+          pagebreak: {mode:['avoid-all']}
+        }).from(pageEls[0]).toPdf().get('pdf');
+      }else{
+        const canvas = await html2pdf().set({
+          html2canvas: {scale:2, useCORS:true, logging:false}
+        }).from(pageEls[i]).toCanvas().get('canvas');
+        const img = canvas.toDataURL('image/jpeg', 0.92);
+        const h = Math.min(297, canvas.height * 210 / canvas.width);
+        pdf.addPage('a4', 'portrait');
+        pdf.addImage(img, 'JPEG', 0, 0, 210, h);
+      }
+    }
+    document.body.classList.remove('exporting');
+
+    const blob = pdf.output('blob');
+    if(lastPdfUrl) URL.revokeObjectURL(lastPdfUrl);
+    lastPdfUrl = URL.createObjectURL(blob);
+
+    /* Path 1 — native download */
+    try{
+      const a = document.createElement('a');
+      a.href = lastPdfUrl; a.download = fname;
+      document.body.appendChild(a); a.click(); a.remove();
+    }catch(e){}
+
+    /* Path 2 — always offer Open PDF as backup */
+    document.getElementById('pdfOpen').href = lastPdfUrl;
+    document.getElementById('pdfbar').classList.add('show');
+  }catch(e){
+    document.body.classList.remove('exporting');
+    window.print();   // final fallback
+  }finally{
+    btn.disabled = false; btn.textContent = '⤓ Download PDF';
+    fitPreview();
+  }
+}
+function newQuotation(){
+  numberReserved = false;
+  dateManual = false;
+  S.co=""; S.attn=""; S.addr=""; S.cgstin=""; S.cph=""; S.state="Delhi"; S.shipTo="";
+  S.items=[]; S.freight=0; S.freightMode="none";
+  document.getElementById('frAmtWrap').style.display='none';
+  S.date=new Date().toISOString().slice(0,10);
+  document.getElementById('pdfbar').classList.remove('show');
+  addItem();
+  initNumber();
+}
+function syncInputs(){
+  const selR = document.getElementById('inRepSel');
+  const isEmp = EMP.some(e=>e[0]===S.rep);
+  selR.value = S.rep ? (isEmp ? S.rep : '__other') : '';
+  document.getElementById('repNameWrap').style.display = (selR.value==='__other') ? '' : 'none';
+  document.getElementById('inShip').value = S.shipTo;
+  document.getElementById('inFrMode').value = S.freightMode;
+  document.getElementById('frAmtWrap').style.display = (S.freightMode==='amount') ? '' : 'none';
+  document.getElementById('inQno').value = S.qno;
+  document.getElementById('inDate').value = S.date;
+  document.getElementById('inValid').value = S.valid;
+  document.getElementById('inGst').value = S.gst;
+  document.getElementById('inRep').value = S.rep;
+  document.getElementById('inRepPh').value = S.repPh;
+  document.getElementById('inCo').value = S.co;
+  document.getElementById('inAttn').value = S.attn;
+  document.getElementById('inAddr').value = S.addr;
+  document.getElementById('inCGst').value = S.cgstin;
+  document.getElementById('inCPh').value = S.cph;
+  document.getElementById('inState').value = S.state;
+  document.getElementById('inFreight').value = S.freight;
+  document.getElementById('inWar').value = S.warranty;
+  document.getElementById('inPay').value = S.payTerms;
+  document.getElementById('inTerms').value = S.terms;
+}
+
+/* ================= BOOT ================= */
+const sel = document.getElementById('inState');
+sel.innerHTML = STATES.map(s=>`<option ${s==='Delhi'?'selected':''}>${s}</option>`).join('');
+document.getElementById('inRepSel').innerHTML =
+  `<option value="">— Select name —</option>` +
+  EMP.map(e=>`<option value="${e[0]}">${e[0]}</option>`).join('') +
+  `<option value="__other">＋ Add new name…</option>`;
+addItem();
+syncInputs();
+R();
+initNumber();
+fitPreview();
+window.addEventListener('focus', ()=>{
+  if(!dateManual){
+    const d = new Date().toISOString().slice(0,10);
+    if(S.date !== d){ S.date = d; syncInputs(); R(); }
+  }
+});
+</script>
+<!-- ================================================================
+     GOOGLE SHEETS INTEGRATION — OakCraft Quotation Builder
+     ================================================================ -->
+<script>
+(function(){
+  /* ⬇️ PASTE YOUR APPS SCRIPT WEB APP URL HERE (ends with /exec) */
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbzIayCjJeyzojqJbZLijTo_cPy6YywZETtyuD3uaIZnw4fU7WwiPWKmgP81M8JeM0Dkvg/exec';
+
+  const configured = GAS_URL.indexOf('XXXX') === -1;
+
+  async function gas(action, payload){
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(Object.assign({ action: action }, payload || {}))
+    });
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || 'Backend error');
+    return data;
+  }
+
+  window.storage = {
+    async get(key, shared){
+      const r = await gas('storageGet', { key: key });
+      if(!r.found) throw new Error('Key not found: ' + key);
+      return { key: key, value: r.value, shared: !!shared };
+    },
+    async set(key, value, shared){
+      await gas('storageSet', { key: key, value: value });
+      return { key: key, value: value, shared: !!shared };
+    }
+  };
+
+  function buildPayload(){
+    const C = calc();
+    return {
+      qnoFormatted: fmtQno(),
+      fy: FY,
+      qno: S.qno,
+      date: S.date,
+      valid: S.valid,
+      gst: S.gst,
+      rep: S.rep,
+      repPh: S.repPh,
+      co: S.co,
+      attn: S.attn,
+      addr: S.addr,
+      cgstin: S.cgstin,
+      cph: S.cph,
+      state: S.state,
+      shipTo: S.shipTo,
+      freightMode: S.freightMode,
+      freight: C.fr,
+      sub: C.sub,
+      taxable: C.taxable,
+      cgstAmt: C.cgst,
+      sgstAmt: C.sgst,
+      igstAmt: C.igst,
+      roundoff: Number(C.roundoff.toFixed(2)),
+      grand: C.grand,
+      warranty: S.warranty,
+      payTerms: S.payTerms,
+      terms: S.terms,
+      items: C.rows.map(function(r, i){
+        return {
+          line: i + 1, name: r.name, desc: r.desc, hsn: r.hsn,
+          qty: r.qty, price: r.price, disc: r.disc || 0,
+          net: Number(r.net.toFixed(2)), amt: Number(r.amt.toFixed(2)),
+          del: r.del
+        };
+      })
+    };
+  }
+
+  function setStatus(msg, ok){
+    const el = document.getElementById('storeStatus');
+    if(el){ el.textContent = msg; el.style.color = ok ? 'var(--ok)' : 'var(--err)'; }
+  }
+
+  const originalDownloadPDF = window.downloadPDF;
+  window.downloadPDF = async function(){
+    await originalDownloadPDF.apply(this, arguments);
+
+    if(typeof repMissing === 'function' && repMissing()) return;
+    if(!configured){
+      setStatus('Google Sheets not connected yet — paste your Web App URL into the integration script.', false);
+      return;
+    }
+    try{
+      setStatus('Saving ' + fmtQno() + ' to Google Sheets…', true);
+      const r = await gas('saveQuotation', { quotation: buildPayload() });
+      setStatus('✓ ' + r.saved + ' saved to Google Sheets (' + r.items + ' item' + (r.items === 1 ? '' : 's') + ').', true);
+    }catch(err){
+      console.error('Sheets save failed:', err);
+      setStatus('Could not save to Google Sheets: ' + err.message + ' — the PDF itself downloaded fine.', false);
+    }
+  };
+
+  if(configured){
+    initNumber();
+  }else{
+    setStatus('Google Sheets not connected — edit GAS_URL in the integration script at the bottom of this file.', false);
+  }
+})();
+</script>
+
+</body>
+</html>
