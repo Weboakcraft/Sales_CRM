@@ -262,7 +262,7 @@ const mem = {};
 const CLOUD = {
   url: "https://script.google.com/macros/s/AKfycbwYDLF2Mh8SCuMTLJTesuIunJ03tuAYFW7x2etsaKUJT3Dua29IsFzU-4E5eiDAX6o1/exec",
   // which localStorage keys map to Sheet collections
-  keys: ['enquiries','quotations','orders','dispatch','customers','products'],
+  keys: ['enquiries','quotations','orders','dispatch','customers','products','users'],
   ready: false,
   _timers: {},
   async pull(){
@@ -447,7 +447,7 @@ function setView(v){
 
 /* ---------- Dashboard ---------- */
 function renderDashboard(){
-  const enq=DB.enquiries(), quo=DB.quotations(), ord=DB.orders(), dis=DB.dispatch();
+  const enq=scope(DB.enquiries()), quo=scope(DB.quotations()), ord=scope(DB.orders()), dis=scope(DB.dispatch());
   const totalEnq=enq.length;
   const won=enq.filter(e=>e.stage==='Won').length;
   const conv=totalEnq? Math.round(won/totalEnq*100):0;
@@ -601,7 +601,7 @@ function renderEnquiries(){
 }
 function paintEnq(){
   const q=(document.getElementById('globalSearch').value||'').toLowerCase();
-  let rows=DB.enquiries().filter(e=>
+  let rows=scope(DB.enquiries()).filter(e=>
     (!enqFilter.stage||e.stage===enqFilter.stage)&&(!enqFilter.sales||e.salesperson===enqFilter.sales)&&
     (!q||[e.id,e.customer,e.product].join(' ').toLowerCase().includes(q)));
   rows=rows.sort((a,b)=>b.date.localeCompare(a.date));
@@ -618,7 +618,7 @@ function paintEnq(){
 /* ---------- Pipeline board ---------- */
 function renderPipeline(){
   const stages=['New','Contacted','Qualified','Quoted','Won'];
-  const enq=DB.enquiries();
+  const enq=scope(DB.enquiries());
   content.innerHTML=`<div class="pipeline">${stages.map(st=>{
     const items=enq.filter(e=>e.stage===st);
     const val=items.reduce((s,e)=>s+e.value,0);
@@ -634,7 +634,7 @@ function renderPipeline(){
 
 /* ---------- Quotations ---------- */
 function renderQuotations(){
-  const list=DB.quotations();
+  const list=scope(DB.quotations());
   content.innerHTML=table(`Quotations`,list.length,
     `<th>Quote ID</th><th>Date</th><th>Customer</th><th>Product</th><th>Amount</th><th>Discount</th><th>Valid Till</th><th>Owner</th><th>Status</th><th></th>`,
     'quo-body','No quotations yet.',dlBtn('quotations')+`<a class="btn primary sm" href="quotation-builder.html" target="_blank" style="text-decoration:none">${I.doc}Quotation Builder</a>`);
@@ -688,8 +688,8 @@ function renderProducts(){
       ${dlBtn('products')}
       <button class="btn sm" onclick="downloadProductTemplate()">${I.download}Template</button>
       <button class="btn sm" onclick="triggerBulk()">${I.upload}Bulk Upload</button>
-      <button class="btn primary sm" onclick="openProdModal()">${I.plus}Add Product</button></div></div>
-    <div style="overflow-x:auto"><table><thead><tr><th>Product ID</th><th>Name</th><th>SKU</th><th>Category</th><th>Unit Price</th><th>Stock</th><th>Stock Value</th><th>Status</th><th></th></tr></thead>
+      ${AUTH.isAdmin()?`<button class="btn sm" style="color:#d03b3b" onclick="bulkDeleteProducts()">Delete Selected</button>`:``}<button class="btn primary sm" onclick="openProdModal()">${I.plus}Add Product</button></div></div>
+    <div style="overflow-x:auto"><table><thead><tr>${AUTH.isAdmin()?`<th><input type="checkbox" id="prod-chk-all" onclick="toggleAllProd(this)"></th>`:``}<th>Product ID</th><th>Name</th><th>SKU</th><th>Category</th><th>Unit Price</th><th>Stock</th><th>Stock Value</th><th>Status</th><th></th></tr></thead>
     <tbody id="prod-body"></tbody></table></div></div>`;
   paintTable('prod-body');
 }
@@ -705,13 +705,13 @@ function paintTable(bodyId){
   let html='';
   if(bodyId==='ord-body'){
     const f=document.getElementById('f-ostat')?.value||'';
-    let rows=DB.orders().filter(o=>(!f||o.status===f)&&(!q||[o.id,o.customer,o.product].join(' ').toLowerCase().includes(q))).sort((a,b)=>b.date.localeCompare(a.date));
+    let rows=scope(DB.orders()).filter(o=>(!f||o.status===f)&&(!q||[o.id,o.customer,o.product].join(' ').toLowerCase().includes(q))).sort((a,b)=>b.date.localeCompare(a.date));
     html=rows.map(o=>`<tr style="cursor:pointer" onclick="openOrderDetail('${o.id}')"><td class="strong tabular">${o.id}</td><td class="sub tabular">${o.date}</td><td>${userCell(o.customer)}</td>
       <td>${o.product} <span class="sub">×${o.qty}</span></td><td class="strong tabular">${money(o.amount)}</td><td>${payChip(o.payment)}</td>
       <td class="sub tabular">${o.expDispatch}</td><td>${orderChip(o.status)}</td>
       <td onclick="event.stopPropagation()">${nextStageBtn(o)}</td></tr>`).join('')||emptyRow(9);
   } else if(bodyId==='dis-body'){
-    let rows=DB.dispatch().filter(d=>!q||[d.id,d.customer,d.tracking,d.orderId].join(' ').toLowerCase().includes(q)).sort((a,b)=>b.dispatchedOn.localeCompare(a.dispatchedOn));
+    let rows=scope(DB.dispatch()).filter(d=>!q||[d.id,d.customer,d.tracking,d.orderId].join(' ').toLowerCase().includes(q)).sort((a,b)=>b.dispatchedOn.localeCompare(a.dispatchedOn));
     html=rows.map(d=>`<tr><td class="strong tabular">${d.id}</td><td class="tabular">${d.orderId}</td><td>${userCell(d.customer)}</td>
       <td>${d.product} <span class="sub">×${d.qty}</span></td><td>${d.courier}</td><td class="sub tabular">${d.tracking}</td>
       <td class="sub tabular">${d.dispatchedOn}</td><td class="sub tabular">${d.eta}</td><td>${disChip(d.status)}</td></tr>`).join('')||emptyRow(9);
@@ -727,11 +727,11 @@ function paintTable(bodyId){
     const f=document.getElementById('f-cat')?.value||'';
     let rows=DB.products().filter(p=>(!f||p.cat===f)&&(!q||[p.id,p.name,p.sku].join(' ').toLowerCase().includes(q)));
     html=rows.map(p=>{const st=p.stock===0?'<span class="chip c-lost">Out of Stock</span>':p.stock<10?'<span class="chip c-prog">Low</span>':'<span class="chip c-won">In Stock</span>';
-      return `<tr><td class="strong tabular">${p.id}</td><td class="strong">${p.name}</td><td class="sub tabular">${p.sku}</td><td>${p.cat}</td>
+      return `<tr>${AUTH.isAdmin()?`<td><input type="checkbox" class="prod-chk" value="${p.id}" onclick="event.stopPropagation()"></td>`:``}<td class="strong tabular">${p.id}</td><td class="strong">${p.name}</td><td class="sub tabular">${p.sku}</td><td>${p.cat}</td>
       <td class="strong tabular">${money(p.price)}</td><td class="tabular">${p.stock} ${p.unit}</td><td class="tabular">${money(p.price*p.stock)}</td><td>${st}</td>
       <td><div class="row-actions" style="display:flex"><button onclick="openProdModal('${p.id}')">${I.edit}</button><button onclick="delRow('products','${p.id}')">${I.trash}</button></div></td></tr>`;}).join('')||emptyRow(9);
   } else if(bodyId==='quo-body'){
-    const list=DB.quotations();
+    const list=scope(DB.quotations());
     let rows=list.filter(x=>!q||[x.id,x.customer,x.product].join(' ').toLowerCase().includes(q)).sort((a,b)=>b.date.localeCompare(a.date));
     html=rows.map(x=>`<tr><td class="strong tabular">${x.id}</td><td class="sub tabular">${x.date}</td><td>${userCell(x.customer)}</td>
       <td>${x.product} <span class="sub">×${x.qty}</span></td><td class="strong tabular">${money(x.amount)}</td>
@@ -797,7 +797,7 @@ function openEnqModal(id){
   const prods=DB.products(), custs=DB.customers();
   openModal(`<div class="modal-head"><h3>${id?'Edit':'New'} Enquiry</h3><button class="icon-btn" onclick="closeModal()">✕</button></div>
     <div class="modal-body">
-      <div class="form-row"><label>Customer</label><select id="m-cust">${custs.map(c=>`<option ${e.custId===c.id?'selected':''}>${c.name}</option>`).join('')}</select></div>
+      <div class="form-row"><label>Customer</label>${customerSelectHTML("m-cust","enqc", e.custId)}</div>
       <div class="form-row two"><div><label>Product</label><select id="m-prod">${prods.map(p=>`<option ${e.prodId===p.id?'selected':''} data-price="${p.price}" data-id="${p.id}">${p.name}</option>`).join('')}</select></div>
         <div><label>Quantity</label><input id="m-qty" type="number" min="1" value="${e.qty||1}"></div></div>
       <div class="form-row two"><div><label>Source</label><select id="m-src">${SOURCES.map(s=>`<option ${e.source===s?'selected':''}>${s}</option>`).join('')}</select></div>
@@ -818,7 +818,7 @@ function openOrderModal(id){
               : [{type:'EXISTING PRODUCT', prodId:'', product:'', manual:false, spec:'', image:'', qty:1, rate:0}]);
   openModal(`<div class="modal-head"><h3>${id?'Edit':'New'} Order</h3><button class="icon-btn" onclick="closeModal()">✕</button></div>
     <div class="modal-body">
-      <div class="form-row"><label>Customer</label><select id="o-cust">${custs.map(c=>`<option ${o.custId===c.id?'selected':''}>${c.name}</option>`).join('')}</select></div>
+      <div class="form-row"><label>Customer</label>${customerSelectHTML("o-cust","ordc", o.custId)}</div>
       <div class="form-row"><label>Products</label><div id="o-items"></div>
         <button type="button" class="btn ghost sm" style="margin-top:8px" onclick="addOrderItem()">+ Add Product</button>
         <div class="sub tabular" id="o-total" style="margin-top:6px"></div></div>
@@ -928,7 +928,7 @@ function saveOrder(id){
     note:document.getElementById('o-note').value
   };
   const list=DB.orders();
-  if(id){Object.assign(list.find(x=>x.id===id),rec);} else {rec.id=uid('ORD-');rec.date=today();list.unshift(rec);}
+  if(id){Object.assign(list.find(x=>x.id===id),rec);} else {rec.id=uid('ORD-');rec.date=today();stampOwner(rec);list.unshift(rec);}
   DB.save('orders',list); closeModal(); toast(id?'Order updated':'Order added'); refreshBadges(); setView('orders');
 }
 function saveEnq(id){
@@ -943,7 +943,7 @@ function saveEnq(id){
     note:document.getElementById('m-note').value, value:(+prodSel.dataset.price)*qty
   };
   const list=DB.enquiries();
-  if(id){Object.assign(list.find(x=>x.id===id),rec);} else {rec.id=uid('ENQ-');rec.date=today();list.unshift(rec);}
+  if(id){Object.assign(list.find(x=>x.id===id),rec);} else {rec.id=uid('ENQ-');rec.date=today();stampOwner(rec);list.unshift(rec);}
   DB.save('enquiries',list); closeModal(); toast(id?'Enquiry updated ✓':'Enquiry added ✓'); refreshBadges(); setView('enquiries');
 }
 
@@ -954,11 +954,12 @@ function openCustModal(id){
       <div class="form-row"><label>Company Name</label><input id="c-name" value="${c.name||''}"></div>
       <div class="form-row two"><div><label>Contact Person</label><input id="c-contact" value="${c.contact||''}"></div><div><label>City</label><select id="c-city">${CITIES.map(x=>`<option ${c.city===x?'selected':''}>${x}</option>`).join('')}</select></div></div>
       <div class="form-row two"><div><label>Email</label><input id="c-email" value="${c.email||''}"></div><div><label>Phone</label><input id="c-phone" value="${c.phone||''}"></div></div>
+      <div class="form-row"><label>GSTIN</label><input id="c-gstin" value="${c.gstin||''}" placeholder="15-digit GSTIN" style="text-transform:uppercase"></div>
       <div class="form-row"><label>Type</label><select id="c-type">${['Enterprise','SMB','Retail'].map(x=>`<option ${c.type===x?'selected':''}>${x}</option>`).join('')}</select></div>
     </div><div class="modal-foot"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveCust('${id||''}')">${I.check}Save</button></div>`);
 }
 function saveCust(id){
-  const rec={name:v('c-name'),contact:v('c-contact'),city:v('c-city'),email:v('c-email'),phone:v('c-phone'),type:v('c-type')};
+  const rec={name:v('c-name'),contact:v('c-contact'),city:v('c-city'),email:v('c-email'),phone:v('c-phone'),type:v('c-type'),gstin:(v('c-gstin')||'').toUpperCase()};
   const list=DB.customers();
   if(id){Object.assign(list.find(x=>x.id===id),rec);}else{rec.id=uid('CUST-');rec.since=new Date().getFullYear();list.unshift(rec);}
   DB.save('customers',list); closeModal(); toast('Customer saved ✓'); setView('customers');
@@ -1074,7 +1075,8 @@ const API_PLATFORMS = [
   {k:'justdial',   name:'JustDial',    fields:['Account ID','API Key']},
   {k:'tradeindia', name:'TradeIndia',  fields:['User ID','Profile Key','API Key']},
   {k:'meta',       name:'Meta (Facebook / Instagram Leads)', fields:['Page ID','App ID','Access Token']},
-  {k:'custom',     name:'Custom / Other', fields:['Platform Name','Endpoint URL','API Key']}
+  {k:'custom',     name:'Custom / Other', fields:['Platform Name','Endpoint URL','API Key']},
+  {k:'gst',        name:'GST Verification (customer lookup)', fields:['API Key / Auth header','Endpoint URL (use {gstin} placeholder)']}
 ];
 function apiConfig(){ return store.get('apiconfig') || {}; }
 function apiCardsHTML(){
@@ -1419,10 +1421,134 @@ function injectIcons(){
   document.querySelector('.search').insertAdjacentHTML('afterbegin',I.search);
   document.getElementById('quickAdd').insertAdjacentHTML('afterbegin',I.plus);
 }
+/* ===================== AUTH & LOGIN ===================== */
+const AUTH = {
+  SESSION_KEY: 'crm_session', SESSION_MS: 24*60*60*1000,
+  async hash(pw){ const buf=await crypto.subtle.digest('SHA-256', new TextEncoder().encode('oakcraft::'+pw)); return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join(''); },
+  users(){ return store.get('users', []).map(x=>(x&&x.data!==undefined)?x.data:x); },
+  saveUsers(list){ store.set('users', list); },
+  find(email){ return this.users().find(u=>u&&(u.email||'').toLowerCase()===(email||'').toLowerCase()); },
+  session(){ try{ const s=JSON.parse(localStorage.getItem(this.SESSION_KEY)||'null'); if(s&&s.exp&&Date.now()<s.exp) return s; }catch(e){} return null; },
+  setSession(email){ try{ localStorage.setItem(this.SESSION_KEY, JSON.stringify({email, exp:Date.now()+this.SESSION_MS})); }catch(e){} },
+  logout(){ try{ localStorage.removeItem(this.SESSION_KEY); }catch(e){} location.reload(); },
+  current(){ const s=this.session(); return s? (this.find(s.email)||{email:s.email}) : null; },
+  isAdmin(){ const u=this.current(); return !!(u && u.role==='Administrator'); }
+};
+function seedUsers(){ let list=AUTH.users(); if(!list||!list.length){ list=[{email:'mis@oakcraft.in',name:'Ankush Goswami',role:'Administrator',status:'Active',pwdSet:false,hash:''},{email:'vishu@oakcraft.in',name:'Vishu Mittal',role:'Administrator',status:'Active',pwdSet:false,hash:''}]; AUTH.saveUsers(list); } return list; }
+
+function renderLogin(msg){
+  const app=document.querySelector('.app'); if(app) app.style.display='none';
+  let ov=document.getElementById('loginOverlay'); if(!ov){ ov=document.createElement('div'); ov.id='loginOverlay'; document.body.appendChild(ov); }
+  ov.setAttribute('style', 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0f1729,#1a2540);padding:20px');
+  ov.innerHTML = `<div style="width:100%;max-width:380px;background:#fff;border-radius:16px;padding:30px;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><div style="width:38px;height:38px;border-radius:10px;background:#2a78d6;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px">O</div><div><div style="font-weight:800;font-size:18px;color:#111">OakCraft CRM</div><div style="font-size:12px;color:#888">Sales Pipeline Suite</div></div></div>
+    <h3 style="margin:18px 0 4px;color:#111">Sign in</h3>
+    <div id="loginMsg" style="font-size:12.5px;color:#d03b3b;min-height:18px;margin-bottom:6px">${msg||''}</div>
+    <label style="font-size:12px;color:#888">Email</label>
+    <input id="lg-email" type="email" placeholder="you@oakcraft.in" style="width:100%;padding:11px;margin:4px 0 12px;border:1px solid #ddd;border-radius:9px;box-sizing:border-box;color:#111">
+    <label style="font-size:12px;color:#888">Password</label>
+    <input id="lg-pw" type="password" placeholder="Password" style="width:100%;padding:11px;margin:4px 0 12px;border:1px solid #ddd;border-radius:9px;box-sizing:border-box;color:#111" onkeydown="if(event.key==='''Enter''')doLogin()">
+    <button onclick="doLogin()" style="width:100%;padding:12px;background:#2a78d6;color:#fff;border:0;border-radius:9px;font-weight:700;cursor:pointer">Continue</button>
+    <div style="font-size:11.5px;color:#aaa;margin-top:14px;line-height:1.5">First time? Enter your email and the password you want to set — your account will be activated. Sessions stay active for 24 hours.</div>
+  </div>`;
+  const em=document.getElementById('lg-email'); if(em) em.focus();
+}
+
+async function doLogin(){
+  const email=(document.getElementById('lg-email').value||'').trim().toLowerCase();
+  const pw=document.getElementById('lg-pw').value||'';
+  const msg=document.getElementById('loginMsg');
+  if(!email||!pw){ if(msg)msg.textContent='Enter email and password.'; return; }
+  const u=AUTH.find(email);
+  if(!u){ if(msg)msg.textContent='No account for this email. Ask your admin to add you.'; return; }
+  if(u.status && u.status!=='Active'){ if(msg)msg.textContent='This account is inactive.'; return; }
+  const h=await AUTH.hash(pw); const list=AUTH.users(); const rec=list.find(x=>x&&(x.email||'').toLowerCase()===email);
+  if(!u.pwdSet || !u.hash){ if(pw.length<6){ if(msg)msg.textContent='Choose a password of at least 6 characters.'; return; } rec.hash=h; rec.pwdSet=true; AUTH.saveUsers(list); AUTH.setSession(email); bootApp(); return; }
+  if(u.hash!==h){ if(msg)msg.textContent='Incorrect password.'; return; }
+  AUTH.setSession(email); bootApp();
+}
+function bootApp(){ const ov=document.getElementById('loginOverlay'); if(ov) ov.remove(); const app=document.querySelector('.app'); if(app) app.style.display=''; applyUserToSidebar(); bindAppEvents(); refreshBadges(); setView('dashboard'); }
+function applyUserToSidebar(){
+  const u=AUTH.current()||{}; const foot=document.querySelector('.sidebar-foot');
+  const initials=((u.name||u.email||'?').split(' ').map(x=>x[0]).join('')||'?').slice(0,2).toUpperCase();
+  if(foot){ foot.innerHTML=`<div class="avatar">${initials}</div><div class="info">${u.name||u.email}<small>${u.role||"User"} · OakCraft</small></div><button class="icon-btn" title="Logout" onclick="AUTH.logout()" style="margin-left:auto">⏻</button>`; }
+  const adminNav=document.querySelector('.nav a[data-view="admin"]'); const adminLabel=adminNav?adminNav.previousElementSibling:null;
+  if(adminNav){ const show=AUTH.isAdmin(); adminNav.style.display=show?'':'none'; if(adminLabel&&adminLabel.classList.contains('nav-label')) adminLabel.style.display=show?'':'none'; }
+}
+
+/* ===== per-user data scope ===== */
+function scope(list){ if(AUTH.isAdmin()) return list; const me=(AUTH.current()||{}).email; if(!me) return list; const meL=me.toLowerCase(); return (list||[]).filter(r=> !r.owner || (r.owner||'').toLowerCase()===meL); }
+function stampOwner(rec){ const me=(AUTH.current()||{}).email; if(me && !rec.owner) rec.owner=me; return rec; }
+
+/* ===== admin-only bulk delete (products) ===== */
+function toggleAllProd(cb){ document.querySelectorAll('.prod-chk').forEach(x=>{ x.checked=cb.checked; }); }
+function bulkDeleteProducts(){ if(!AUTH.isAdmin()){ toast('Admin only'); return; } const ids=[...document.querySelectorAll('.prod-chk:checked')].map(x=>x.value); if(!ids.length){ toast('Select products to delete'); return; } if(!confirm('Delete '+ids.length+' selected product(s)? This cannot be undone.')) return; const remaining=DB.products().filter(p=>!ids.includes(p.id)); DB.save('products', remaining); toast(ids.length+' product(s) deleted'); setView('products'); }
+
+function customerSelectHTML(selId, prefix, selectedCustId){
+  const custs=DB.customers();
+  const opts=custs.map(c=>`<option value="${c.name.replace(/"/g,"&quot;")}" ${selectedCustId===c.id?"selected":""}>${c.name}</option>`).join("");
+  return `<div style="display:flex;gap:6px;align-items:center"><select id="${selId}" style="flex:1"><option value="">-- Select customer --</option>${opts}</select>
+    <button type="button" class="btn ghost sm" data-prefix="${prefix}" onclick="toggleNewCust(this.dataset.prefix)">+ New</button></div>
+    <div id="${prefix}-box" style="display:none;border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:8px;background:var(--bg)">
+      <div style="font-weight:700;font-size:12.5px;margin-bottom:8px">Add New Customer</div>
+      <div style="display:flex;gap:8px;align-items:end;margin-bottom:8px">
+        <div style="flex:1"><label class="lbl" style="font-size:11px">GSTIN (auto-fetch)</label><input id="${prefix}-gst" placeholder="15-digit GSTIN" style="width:100%;text-transform:uppercase"></div>
+        <button type="button" class="btn sm" data-prefix="${prefix}" onclick="fetchByGST(this.dataset.prefix)">Fetch details</button>
+      </div>
+      <div id="${prefix}-gstmsg" style="font-size:11.5px;color:var(--text-2);margin-bottom:8px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label class="lbl" style="font-size:11px">Company Name</label><input id="${prefix}-name"></div>
+        <div><label class="lbl" style="font-size:11px">Contact Person</label><input id="${prefix}-contact"></div>
+        <div><label class="lbl" style="font-size:11px">City</label><input id="${prefix}-city"></div>
+        <div><label class="lbl" style="font-size:11px">Phone</label><input id="${prefix}-phone"></div>
+        <div style="grid-column:1/3"><label class="lbl" style="font-size:11px">Email</label><input id="${prefix}-email"></div>
+      </div>
+      <button type="button" class="btn primary sm" style="margin-top:10px" data-sel="${selId}" data-prefix="${prefix}" onclick="saveInlineCust(this.dataset.sel, this.dataset.prefix)">Save Customer</button>
+    </div>`;
+}
+
+function toggleNewCust(prefix){ const b=document.getElementById(prefix+'-box'); if(b) b.style.display=(b.style.display==='none'?'':'none'); }
+function saveInlineCust(selId, prefix){
+  const g=id=>{ const el=document.getElementById(prefix+'-'+id); return el?el.value.trim():''; };
+  const name=g('name'); if(!name){ toast('Enter company name'); return; }
+  const rec={ id:uid('CUST-'), name, contact:g('contact'), city:g('city'), email:g('email'), phone:g('phone'), gstin:g('gst'), type:'SMB', since:new Date().getFullYear() };
+  stampOwner(rec);
+  const list=DB.customers(); list.unshift(rec); DB.save('customers', list);
+  const sel=document.getElementById(selId); if(sel){ const o=document.createElement('option'); o.value=rec.name; o.textContent=rec.name; o.selected=true; sel.insertBefore(o, sel.children[1]||null); sel.value=rec.name; }
+  const b=document.getElementById(prefix+'-box'); if(b) b.style.display='none'; toast('Customer added');
+}
+
+const GST_STATES={'01':'Jammu & Kashmir','02':'Himachal Pradesh','03':'Punjab','04':'Chandigarh','05':'Uttarakhand','06':'Haryana','07':'Delhi','08':'Rajasthan','09':'Uttar Pradesh','10':'Bihar','11':'Sikkim','12':'Arunachal Pradesh','13':'Nagaland','14':'Manipur','15':'Mizoram','16':'Tripura','17':'Meghalaya','18':'Assam','19':'West Bengal','20':'Jharkhand','21':'Odisha','22':'Chhattisgarh','23':'Madhya Pradesh','24':'Gujarat','27':'Maharashtra','29':'Karnataka','30':'Goa','32':'Kerala','33':'Tamil Nadu','34':'Puducherry','36':'Telangana','37':'Andhra Pradesh'};
+function gstValid(g){ return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(g); }
+function gstConfig(){ const c=(store.get('apiconfig',{})||{}); return c.gst||null; }
+async function fetchByGST(prefix){
+  const set=(id,val)=>{ const el=document.getElementById(prefix+'-'+id); if(el&&val!=null) el.value=val; };
+  const msg=document.getElementById(prefix+'-gstmsg');
+  const gEl=document.getElementById(prefix+'-gst'); const gstin=((gEl&&gEl.value)||'').trim().toUpperCase(); if(gEl) gEl.value=gstin;
+  if(!gstValid(gstin)){ if(msg){msg.style.color='#d03b3b';msg.textContent='Enter a valid 15-character GSTIN.';} return; }
+  const st=GST_STATES[gstin.slice(0,2)]||''; const cfg=gstConfig();
+  if(!cfg || !cfg.enabled || !cfg.fields || !cfg.fields[0]){ if(st) set('city', st); if(msg){ msg.style.color='#b06a00'; msg.textContent='No GST API connected. Derived state: '+(st||'unknown')+'. Add a provider in Admin > API Integrations (GST) to auto-fill full details.'; } return; }
+  if(msg){ msg.style.color='var(--text-2)'; msg.textContent='Fetching from GST provider...'; }
+  try{
+    const endpoint=cfg.fields[1]||cfg.fields[0]; const url=endpoint.replace('{gstin}', gstin).replace('{GSTIN}', gstin);
+    const headers={}; if(cfg.fields[0]) headers['Authorization']=cfg.fields[0];
+    const r=await fetch(url, {headers}); const j=await r.json(); const d=j.data||j.result||j.taxpayerInfo||j;
+    const name=d.tradeNam||d.tradeName||d.lgnm||d.legalName||d.name||'';
+    const addr=(d.pradr&&(d.pradr.adr||(d.pradr.addr&&d.pradr.addr)))||d.address||{};
+    const city=(addr&&(addr.city||addr.dst||addr.loc))||st;
+    if(name) set('name', name); if(city) set('city', city); if(d.email) set('email', d.email); if(d.mobile||d.phone) set('phone', d.mobile||d.phone);
+    if(msg){ msg.style.color='#0ca30c'; msg.textContent='Details fetched. Review & save.'; }
+  }catch(e){ if(msg){ msg.style.color='#d03b3b'; msg.textContent='Fetch failed: '+e.message+'. Check the GST endpoint in Admin > API Integrations.'; } }
+}
+
 async function init(){
   injectIcons(); applyTheme();
   try{ await CLOUD.pull(); }catch(e){ console.warn('cloud pull error', e); }
-  seed(); refreshBadges();
+  seed(); seedUsers();
+  if(AUTH.session()){ bootApp(); } else { renderLogin(); }
+}
+function bindAppEvents(){
+  if(window.__appBound) return; window.__appBound=true;
   document.querySelectorAll('.nav a[data-view]').forEach(a=>a.addEventListener('click',()=>setView(a.dataset.view)));
   document.getElementById('themeBtn').addEventListener('click',()=>{
     var _nt=isDark()?'light':'dark';document.documentElement.setAttribute('data-theme',_nt);try{localStorage.setItem('oc_theme',_nt);}catch(e){}applyTheme();setView(state.view);});
@@ -1433,7 +1559,6 @@ async function init(){
   document.getElementById('globalSearch').addEventListener('input',()=>{
     const map={enquiries:'enq-body',quotations:'quo-body',orders:'ord-body',dispatch:'dis-body',customers:'cust-body',products:'prod-body'};
     if(state.view==='enquiries')paintEnq(); else if(map[state.view])paintTable(map[state.view]);});
-  setView('dashboard');
 }
 init();
 
