@@ -302,12 +302,10 @@ const CLOUD = {
   },
   // push a single object-shaped collection (e.g. formfields/permissions) as one record
   pushObj(key, obj){
-    clearTimeout(this._timers['obj_'+key]);
-    this._timers['obj_'+key] = setTimeout(()=>{
-      fetch(this.url, {method:'POST', redirect:'follow', headers:{'Content-Type':'text/plain;charset=utf-8'},
-        body: JSON.stringify({action:'save', collection:key, record:{id:'__config__', data:obj}})
-      }).catch(e=>console.warn('CLOUD pushObj failed', key, e));
-    }, 400);
+    fetch(this.url, {method:'POST', redirect:'follow', keepalive:true, headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({action:'save', collection:key, record:{id:'__config__', data:obj}})})
+    .catch(e=>console.warn('CLOUD pushObj failed', key, e));
+  }
   }
 };
 const money = n => '₹' + Number(n||0).toLocaleString('en-IN');
