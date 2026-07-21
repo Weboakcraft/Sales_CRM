@@ -989,6 +989,10 @@ function DB_users(){
     u = [
       {name:'Ankush Goswami',role:'Administrator',email:'mis@oakcraft.in',phone:'7210876636',status:'Active'},
       {name:'Vishu Mittal',role:'Administrator',email:'vishu@oakcraft.in',phone:'8700545550',status:'Active'},
+      {name:'Ujala Rajput',role:'Sales Executive',email:'ujala444e@gmail.com',phone:'7827554727',status:'Active'},
+      {name:'Amira Saikh',role:'Sales Executive',email:'oc.amirashiekh@gmail.com',phone:'8800848890',status:'Active'},
+      {name:'Niti Kumari',role:'Sales Executive',email:'oc.priya2001@gmail.com',phone:'9910759285',status:'Active'},
+      {name:'Mayank Mittal',role:'Sales Executive',email:'contact@oakcraft.in',phone:'9910566422',status:'Active'},
       ...SALES.map((s,i)=>({name:s,role:i===0?'Sales Manager':'Sales Executive',email:s.toLowerCase().replace(' ','.')+'@oakcraft.in',phone:'',status:i===4?'Inactive':'Active'}))
     ];
     store.set('crm_users', u);
