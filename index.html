@@ -1008,7 +1008,57 @@ function renderAdmin(){
         </div>
         <p style="color:var(--muted);font-size:12px;margin-top:14px">Company: OakCraft · Currency: INR (₹) · Timezone: Asia/Kolkata</p>
       </div>
+    </div>
+    <div class="panel" style="margin-top:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div><h3>API Integrations</h3><div class="lbl" style="color:var(--text-2)">Connect lead sources &amp; platforms — IndiaMART, JustDial, TradeIndia, Meta and more</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr;gap:10px;margin-top:14px" id="apiCards">${apiCardsHTML()}</div>
+      <div style="display:flex;gap:10px;margin-top:14px;align-items:center;flex-wrap:wrap">
+        <button class="btn primary" onclick="saveApiConfig()">Save API settings</button>
+        <span class="lbl" style="color:var(--muted);font-size:12px">Settings are saved to your Google Sheet. Live lead-fetch from each platform is activated separately in the backend.</span>
+      </div>
+    </div>
+  `;
+}
+
+/* ===== API Integrations (lead-source connectors) ===== */
+const API_PLATFORMS = [
+  {k:'indiamart',  name:'IndiaMART',   fields:['CRM Key / Mobile','API Key']},
+  {k:'justdial',   name:'JustDial',    fields:['Account ID','API Key']},
+  {k:'tradeindia', name:'TradeIndia',  fields:['User ID','Profile Key','API Key']},
+  {k:'meta',       name:'Meta (Facebook / Instagram Leads)', fields:['Page ID','App ID','Access Token']},
+  {k:'custom',     name:'Custom / Other', fields:['Platform Name','Endpoint URL','API Key']}
+];
+function apiConfig(){ return store.get('apiconfig') || {}; }
+function apiCardsHTML(){
+  const cfg = apiConfig();
+  return API_PLATFORMS.map(p=>{
+    const c = cfg[p.k] || {};
+    const on = !!c.enabled;
+    const rows = p.fields.map((f,i)=>{
+      const val = (c.fields && c.fields[i]) ? c.fields[i] : "";
+      const isSecret = /key|token|secret|password/i.test(f);
+      const type = isSecret ? "password" : "text";
+      return `<div style="display:flex;flex-direction:column;gap:4px"><label class="lbl" style="font-size:11px;color:var(--text-2)">${f}</label><input data-api-k="${p.k}" data-api-i="${i}" type="${type}" value="${val.replace(/"/g,"&quot;")}" placeholder="${f}" style="padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text)"></div>`;
+    }).join("");
+    return `<div class="panel" style="background:var(--bg);border:1px solid var(--border)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <strong>${p.name}</strong>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" data-api-en="${p.k}" ${on?"checked":""}> Enabled</label>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:10px">${rows}</div>
     </div>`;
+  }).join("");
+}
+function saveApiConfig(){
+  const cfg = {};
+  API_PLATFORMS.forEach(p=>{ cfg[p.k] = {enabled:false, fields:p.fields.map(()=>"")}; });
+  document.querySelectorAll("[data-api-en]").forEach(cb=>{ const k=cb.getAttribute("data-api-en"); if(cfg[k]) cfg[k].enabled = cb.checked; });
+  document.querySelectorAll("[data-api-k]").forEach(inp=>{ const k=inp.getAttribute("data-api-k"); const i=+inp.getAttribute("data-api-i"); if(cfg[k]) cfg[k].fields[i] = inp.value; });
+  store.set("apiconfig", cfg);
+  try{ CLOUD.pushObj("apiconfig", cfg); }catch(e){}
+  toast("API settings saved");
 }
 
 /* ===== OakCraft Form Builder + Permissions ===== */
