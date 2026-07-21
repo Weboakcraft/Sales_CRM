@@ -550,9 +550,9 @@ function drawSources(enq){
     options:baseOpts({horizontal:true})});
 }
 function drawSalesBy(enq){
-  const ctx=document.getElementById('ch-sales'); if(!ctx)return;
-  const vals=SALES.map(s=>enq.filter(e=>e.salesperson===s&&e.stage==='Won').reduce((a,e)=>a+e.value,0));
-  state.charts.sales=new Chart(ctx,{type:'bar',data:{labels:SALES.map(s=>s.split(' ')[0]),datasets:[{data:vals,backgroundColor:'#1baf7a',borderRadius:6,barThickness:22}]},
+  const ctx=document.getElementById('ch-sales'); if(!ctx)return; const _SP=(getForm('enquiry').find(f=>f.label==='Salesperson')&&getForm('enquiry').find(f=>f.label==='Salesperson').options||SALES);
+  const vals=_SP.map(s=>enq.filter(e=>e.salesperson===s&&e.stage==='Won').reduce((a,e)=>a+e.value,0));
+  state.charts.sales=new Chart(ctx,{type:'bar',data:{labels:_SP.map(s=>s.split(' ')[0]),datasets:[{data:vals,backgroundColor:'#1baf7a',borderRadius:6,barThickness:22}]},
     options:baseOpts({yFmt:v=>short(v)})});
 }
 function baseOpts({legend=false,horizontal=false,yFmt=v=>v}={}){
