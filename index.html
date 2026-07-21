@@ -4,7 +4,7 @@
 <script>try{var _t=localStorage.getItem('oc_theme');if(_t==='dark'||_t==='light'){document.documentElement.setAttribute('data-theme',_t);}}catch(e){}</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OakCraft Sales CRM — Enquiry to Dispatch</title>
+<title>OakCraft Sales CRM — Enquiry to Dispahtch</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -984,7 +984,7 @@ const v=id=>document.getElementById(id).value;
 
 /* ---------- Users store ---------- */
 function DB_users(){
-  let u = store.get('crm_users', null);
+  let u = store.get('users', null);
   if(!u){
     u = [
       {name:'Ankush Goswami',role:'Administrator',email:'mis@oakcraft.in',phone:'7210876636',status:'Active'},
@@ -995,7 +995,7 @@ function DB_users(){
       {name:'Mayank Mittal',role:'Sales Executive',email:'contact@oakcraft.in',phone:'9910566422',status:'Active'},
       ...SALES.map((s,i)=>({name:s,role:i===0?'Sales Manager':'Sales Executive',email:s.toLowerCase().replace(' ','.')+'@oakcraft.in',phone:'',status:i===4?'Inactive':'Active'}))
     ];
-    store.set('crm_users', u);
+    store.set('users', u);
   }
   return u;
 }
@@ -1021,12 +1021,12 @@ function saveUser(email){
   const rec={name, email:mail, phone:v('u-phone'), role:v('u-role'), status:v('u-status')};
   if(email){ Object.assign(users.find(x=>x.email===email), rec); }
   else users.push(rec);
-  store.set('crm_users', users);
+  store.set('users', users);
   closeModal(); toast(email?'User updated ✓':'User login created ✓'); setView('admin');
 }
 function delUser(email){
   if(!confirm('Remove this user?'))return;
-  store.set('crm_users', DB_users().filter(x=>x.email!==email));
+  store.set('users', DB_users().filter(x=>x.email!==email));
   toast('User removed'); setView('admin');
 }
 
