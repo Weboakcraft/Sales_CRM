@@ -480,6 +480,11 @@ function renderDashboard(){
       <div class="panel"><h3>Sales by Person <small>Won value</small></h3><div class="chart-wrap chart-sm"><canvas id="ch-sales"></canvas></div></div>
     </div>
 
+    <div class="grid-2">
+      <div class="panel"><h3>State-wise Sales <small>Won value %</small></h3><div class="chart-wrap chart-sm"><canvas id="ch-state"></canvas></div></div>
+      <div class="panel"><h3>Salesperson-wise Sales <small>Won value</small></h3><div class="chart-wrap chart-sm"><canvas id="ch-salespie"></canvas></div></div>
+    </div>
+
     <div class="card">
       <div class="card-head"><h3>Recent Orders</h3><div class="tools"><button class="btn sm" onclick="setView('orders')">View all ${I.arrow}</button></div></div>
       <div style="overflow-x:auto"><table><thead><tr><th>Order</th><th>Customer</th><th>Product</th><th>Amount</th><th>Payment</th><th>Status</th></tr></thead>
@@ -494,7 +499,7 @@ function renderDashboard(){
 
   // charts (guarded — funnel is pure HTML so always renders)
   drawFunnel(enq,quo,ord,dis);
-  if(typeof Chart!=='undefined'){ try{ drawRevenue(); drawStatus(ord); drawSources(enq); drawSalesBy(enq); }catch(err){ console.warn('chart error',err); } }
+  if(typeof Chart!=='undefined'){ try{ drawRevenue(ord); drawStatus(ord); drawSources(enq); drawSalesBy(enq); drawStateSales(enq); drawSalesPie(enq); }catch(err){ console.warn('chart error',err); } }
   else { document.querySelectorAll('.chart-wrap').forEach(c=>{ if(!c.querySelector('.funnel')) c.innerHTML='<div class="empty" style="padding:30px">Charts load when online (Chart.js CDN)</div>'; }); }
 }
 function dcard(ico,bg,col,val,lbl,delta,dir){
@@ -507,10 +512,16 @@ function chartFont(){ const dark=isDark(); return {color:dark?'#c3c2b7':'#52514e
 function isDark(){ return document.documentElement.getAttribute('data-theme')==='dark'; }
 function gridColor(){ return isDark()?'#2c2c2a':'#e1e0d9'; }
 
-function drawRevenue(){
+function drawRevenue(ord){
   const ctx=document.getElementById('ch-rev'); if(!ctx)return;
-  const months=['Feb','Mar','Apr','May','Jun','Jul'];
-  const data=[38,44,41,58,63,72], target=[40,45,50,55,60,68];
+  ord=ord||[];
+  const now=new Date();
+  const months=[], keys=[];
+  for(let k=5;k>=0;k--){ const dt=new Date(now.getFullYear(), now.getMonth()-k, 1); months.push(dt.toLocaleString('en',{month:'short'})); keys.push(dt.getFullYear()+'-'+dt.getMonth()); }
+  const sums={};
+  ord.forEach(o=>{ const d=o.date?new Date(o.date):null; if(!d||isNaN(d))return; const key=d.getFullYear()+'-'+d.getMonth(); if(sums[key]===undefined)sums[key]=0; sums[key]+=(Number(o.amount)||0); });
+  const data=keys.map(k=>+(( (sums[k]||0)/100000 ).toFixed(2)));
+  const mx=Math.max(...data,1); const target=data.map((v,i)=>+(( mx*0.6 + mx*0.08*i ).toFixed(2)));
   state.charts.rev=new Chart(ctx,{type:'line',data:{labels:months,datasets:[
     {label:'Actual',data,borderColor:'#2a78d6',backgroundColor:ctx=>{const g=ctx.chart.ctx.createLinearGradient(0,0,0,240);g.addColorStop(0,'rgba(42,120,214,.25)');g.addColorStop(1,'rgba(42,120,214,0)');return g;},fill:true,tension:.35,borderWidth:2.5,pointRadius:4,pointBackgroundColor:'#2a78d6',pointBorderColor:'#fff',pointBorderWidth:2},
     {label:'Target',data:target,borderColor:'#898781',borderDash:[5,5],borderWidth:1.8,pointRadius:0,tension:.35,fill:false}
@@ -555,6 +566,39 @@ function drawSalesBy(enq){
   state.charts.sales=new Chart(ctx,{type:'bar',data:{labels:_SP.map(s=>s.split(' ')[0]),datasets:[{data:vals,backgroundColor:'#1baf7a',borderRadius:6,barThickness:22}]},
     options:baseOpts({yFmt:v=>short(v)})});
 }
+
+function _cityToState(city){
+  if(!city) return 'Unknown';
+  const m={ 'Delhi':'Delhi','New Delhi':'Delhi','Mumbai':'Maharashtra','Pune':'Maharashtra','Nagpur':'Maharashtra','Bangalore':'Karnataka','Bengaluru':'Karnataka','Mysore':'Karnataka','Chennai':'Tamil Nadu','Coimbatore':'Tamil Nadu','Hyderabad':'Telangana','Kolkata':'West Bengal','Ahmedabad':'Gujarat','Surat':'Gujarat','Vadodara':'Gujarat','Rajkot':'Gujarat','Jaipur':'Rajasthan','Jodhpur':'Rajasthan','Udaipur':'Rajasthan','Lucknow':'Uttar Pradesh','Kanpur':'Uttar Pradesh','Noida':'Uttar Pradesh','Ghaziabad':'Uttar Pradesh','Agra':'Uttar Pradesh','Gurgaon':'Haryana','Gurugram':'Haryana','Faridabad':'Haryana','Chandigarh':'Chandigarh','Bhopal':'Madhya Pradesh','Indore':'Madhya Pradesh','Patna':'Bihar','Kochi':'Kerala','Thiruvananthapuram':'Kerala','Bhubaneswar':'Odisha','Guwahati':'Assam','Ranchi':'Jharkhand','Raipur':'Chhattisgarh','Dehradun':'Uttarakhand','Amritsar':'Punjab','Ludhiana':'Punjab' };
+  return m[city] || city;
+}
+function drawStateSales(enq){
+  const ctx=document.getElementById('ch-state'); if(!ctx)return;
+  const custs=DB.customers();
+  const byState={};
+  enq.filter(e=>e.stage==='Won').forEach(e=>{
+    const c=custs.find(x=>x.id===e.custId);
+    const st=_cityToState(c&&c.city);
+    byState[st]=(byState[st]||0)+(e.value||0);
+  });
+  let labels=Object.keys(byState), data=labels.map(l=>byState[l]);
+  if(state.charts.state) state.charts.state.destroy();
+  if(!labels.length){ labels=['No data']; data=[1]; }
+  const palette=['#1baf7a','#2a78d6','#eda100','#e87ba4','#8b5cf6','#eb6834','#4a3aa7','#e34948','#0ca30c','#00b8d4'];
+  state.charts.state=new Chart(ctx,{type:'doughnut',data:{labels:labels,datasets:[{data:data,backgroundColor:labels.map((l,i)=>palette[i%palette.length]),borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{boxWidth:12,padding:8}},tooltip:{callbacks:{label:function(c){const t=c.dataset.data.reduce((a,b)=>a+b,0)||1;const p=(c.parsed/t*100).toFixed(1);return ' '+c.label+': '+p+'%';}}}}}});
+}
+function drawSalesPie(enq){
+  const ctx=document.getElementById('ch-salespie'); if(!ctx)return;
+  const _SP=(getForm('enquiry').find(f=>f.label==='Salesperson')&&getForm('enquiry').find(f=>f.label==='Salesperson').options||SALES);
+  const data=_SP.map(s=>enq.filter(e=>e.salesperson===s&&e.stage==='Won').reduce((a,e)=>a+(e.value||0),0));
+  let labels=_SP.slice(); let d=data.slice();
+  if(state.charts.salespie) state.charts.salespie.destroy();
+  if(!d.some(v=>v>0)){ /* keep labels, show zeros as tiny slices */ }
+  const palette=['#1baf7a','#2a78d6','#eda100','#e87ba4','#8b5cf6','#eb6834','#4a3aa7','#e34948'];
+  state.charts.salespie=new Chart(ctx,{type:'pie',data:{labels:labels,datasets:[{data:d,backgroundColor:labels.map((l,i)=>palette[i%palette.length]),borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{boxWidth:12,padding:8}},tooltip:{callbacks:{label:function(c){const t=c.dataset.data.reduce((a,b)=>a+b,0)||1;const p=(c.parsed/t*100).toFixed(1);return ' '+c.label+': '+short(c.parsed)+' ('+p+'%)';}}}}}});
+}
+
+
 function baseOpts({legend=false,horizontal=false,yFmt=v=>v}={}){
   const gc=gridColor(), fc=chartFont().color;
   const catAxis={type:'category',grid:{display:false,drawBorder:false},border:{display:false},
