@@ -306,7 +306,6 @@ const CLOUD = {
       body: JSON.stringify({action:'save', collection:key, record:{id:'__config__', data:obj}})})
     .catch(e=>console.warn('CLOUD pushObj failed', key, e));
   }
-  }
 };
 const money = n => '₹' + Number(n||0).toLocaleString('en-IN');
 const short = n => n>=1e7 ? '₹'+(n/1e7).toFixed(2)+'Cr' : n>=1e5 ? '₹'+(n/1e5).toFixed(2)+'L' : n>=1e3 ? '₹'+(n/1e3).toFixed(1)+'K' : '₹'+n;
