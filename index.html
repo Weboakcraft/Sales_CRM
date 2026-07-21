@@ -798,7 +798,7 @@ function openEnqModal(id){
       <div class="form-row two"><div><label>Product</label><select id="m-prod">${prods.map(p=>`<option ${e.prodId===p.id?'selected':''} data-price="${p.price}" data-id="${p.id}">${p.name}</option>`).join('')}</select></div>
         <div><label>Quantity</label><input id="m-qty" type="number" min="1" value="${e.qty||1}"></div></div>
       <div class="form-row two"><div><label>Source</label><select id="m-src">${SOURCES.map(s=>`<option ${e.source===s?'selected':''}>${s}</option>`).join('')}</select></div>
-        <div><label>Salesperson</label><select id="m-sales">${SALES.map(s=>`<option ${e.salesperson===s?'selected':''}>${s}</option>`).join('')}</select></div></div>
+        <div><label>Salesperson</label><select id="m-sales">${(getForm('enquiry').find(f=>f.label==='Salesperson')?.options||SALES).map(s=>`<option ${e.salesperson===s?'selected':''}>${s}</option>`).join('')}</select></div></div>
       <div class="form-row two"><div><label>Priority</label><select id="m-prio">${['High','Medium','Low'].map(p=>`<option ${e.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
         <div><label>Stage</label><select id="m-stage">${['New','Contacted','Qualified','Quoted','Won','Lost'].map(s=>`<option ${e.stage===s?'selected':''}>${s}</option>`).join('')}</select></div></div>
       <div class="form-row"><label>Note</label><textarea id="m-note" rows="2">${e.note||''}</textarea></div>
@@ -819,7 +819,7 @@ function openOrderModal(id){
       <div class="form-row"><label>Products</label><div id="o-items"></div>
         <button type="button" class="btn ghost sm" style="margin-top:8px" onclick="addOrderItem()">+ Add Product</button>
         <div class="sub tabular" id="o-total" style="margin-top:6px"></div></div>
-      <div class="form-row two"><div><label>Salesperson</label><input id="o-sales" value="${o.salesperson||''}" placeholder="Salesperson"></div>
+      <div class="form-row two"><div><label>Salesperson</label><select id="o-sales">${[''].concat((getForm('enquiry').find(f=>f.label==='Salesperson')?.options||SALES)).map(s=>`<option ${(o.salesperson||'')===s?'selected':''}>${s}</option>`).join('')}</select></div>
         <div><label>Payment</label><select id="o-pay"><option ${o.payment==='Pending'?'selected':''}>Pending</option><option ${o.payment==='Partial'?'selected':''}>Partial</option><option ${o.payment==='Paid'?'selected':''}>Paid</option></select></div></div>
       <div class="form-row two"><div><label>Status</label><select id="o-stat">${['Confirmed','In Production','Ready','Dispatched','Delivered','Cancelled'].map(s=>`<option ${o.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
         <div><label>Expected Dispatch</label><input id="o-exp" type="date" value="${o.expDispatch||today()}"></div></div>
