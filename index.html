@@ -792,16 +792,17 @@ function openModal(html){modal.innerHTML=html;modalBg.classList.add('show');}
 function openEnqModal(id){
   const e=id?DB.enquiries().find(x=>x.id===id):{};
   const prods=DB.products(), custs=DB.customers();
+  const _F=getForm('enquiry');const _lbl=(id,d)=>{const f=_F.find(x=>x.id===id);return f&&f.label?f.label:d;};const _opt=(id,d)=>{const f=_F.find(x=>x.id===id);return (f&&f.options&&f.options.length)?f.options:d;};const _req=(id)=>{const f=_F.find(x=>x.id===id);return f&&f.required?' required':'';};
   openModal(`<div class="modal-head"><h3>${id?'Edit':'New'} Enquiry</h3><button class="icon-btn" onclick="closeModal()">✕</button></div>
     <div class="modal-body">
-      <div class="form-row"><label>Customer</label>${customerSelectHTML("m-cust","enqc", e.custId)}</div>
-      <div class="form-row two"><div><label>Product</label><select id="m-prod">${prods.map(p=>`<option ${e.prodId===p.id?'selected':''} data-price="${p.price}" data-id="${p.id}">${p.name}</option>`).join('')}</select></div>
-        <div><label>Quantity</label><input id="m-qty" type="number" min="1" value="${e.qty||1}"></div></div>
-      <div class="form-row two"><div><label>Source</label><select id="m-src">${SOURCES.map(s=>`<option ${e.source===s?'selected':''}>${s}</option>`).join('')}</select></div>
-        <div><label>Salesperson</label><select id="m-sales">${(getForm('enquiry').find(f=>f.label==='Salesperson')?.options||SALES).map(s=>`<option ${e.salesperson===s?'selected':''}>${s}</option>`).join('')}</select></div></div>
-      <div class="form-row two"><div><label>Priority</label><select id="m-prio">${['High','Medium','Low'].map(p=>`<option ${e.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
+      <div class="form-row"><label>${_lbl('f_cust','Customer')}</label>${customerSelectHTML("m-cust","enqc", e.custId)}</div>
+      <div class="form-row two"><div><label>${_lbl('f_prod','Product')}</label><select id="m-prod">${prods.map(p=>`<option ${e.prodId===p.id?'selected':''} data-price="${p.price}" data-id="${p.id}">${p.name}</option>`).join('')}</select></div>
+        <div><label>${_lbl('f_qty','Quantity')}</label><input id="m-qty" type="number" min="1" value="${e.qty||1}"></div></div>
+      <div class="form-row two"><div><label>${_lbl('f_src','Source')}</label><select id="m-src"${_req('f_src')}>${_opt('f_src',SOURCES).map(s=>`<option ${e.source===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div><label>${_lbl('f_sales','Salesperson')}</label><select id="m-sales"${_req('f_sales')}>${(getForm('enquiry').find(f=>f.label==='Salesperson')?.options||SALES).map(s=>`<option ${e.salesperson===s?'selected':''}>${s}</option>`).join('')}</select></div></div>
+      <div class="form-row two"><div><label>${_lbl('f_prio','Priority')}</label><select id="m-prio"${_req('f_prio')}>${_opt('f_prio',['High','Medium','Low']).map(p=>`<option ${e.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
         <div><label>Stage</label><select id="m-stage">${['New','Contacted','Qualified','Quoted','Won','Lost'].map(s=>`<option ${e.stage===s?'selected':''}>${s}</option>`).join('')}</select></div></div>
-      <div class="form-row"><label>Note</label><textarea id="m-note" rows="2">${e.note||''}</textarea></div>
+      <div class="form-row"><label>${_lbl('f_note','Note')}</label><textarea id="m-note" rows="2">${e.note||''}</textarea></div>
     </div>
     <div class="modal-foot"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveEnq('${id||''}')">${I.check}Save Enquiry</button></div>`);
 }
@@ -813,17 +814,18 @@ function openOrderModal(id){
     ? o.items.map(it=>({type:it.type||'EXISTING PRODUCT', prodId:it.prodId||'', product:it.product||'', manual:(it.manual!=null?!!it.manual:(!!it.product && !(it.prodId && prods.some(p=>p.id===it.prodId)))), spec:it.spec||'', image:it.image||'', qty:it.qty||1, rate:(it.rate!=null?it.rate:(it.price||0))}))
     : (o.product ? [{type:'EXISTING PRODUCT', prodId:o.prodId||'', product:o.product, manual:!(o.prodId && prods.some(p=>p.id===o.prodId)), spec:'', image:o.image||'', qty:o.qty||1, rate:(o.qty?(o.amount/o.qty):0)}]
               : [{type:'EXISTING PRODUCT', prodId:'', product:'', manual:false, spec:'', image:'', qty:1, rate:0}]);
+  const _F=getForm('order');const _lbl=(id,d)=>{const f=_F.find(x=>x.id===id);return f&&f.label?f.label:d;};const _opt=(id,d)=>{const f=_F.find(x=>x.id===id);return (f&&f.options&&f.options.length)?f.options:d;};const _req=(id)=>{const f=_F.find(x=>x.id===id);return f&&f.required?' required':'';};
   openModal(`<div class="modal-head"><h3>${id?'Edit':'New'} Order</h3><button class="icon-btn" onclick="closeModal()">✕</button></div>
     <div class="modal-body">
-      <div class="form-row"><label>Customer</label>${customerSelectHTML("o-cust","ordc", o.custId)}</div>
+      <div class="form-row"><label>${_lbl('o_cust','Customer')}</label>${customerSelectHTML("o-cust","ordc", o.custId)}</div>
       <div class="form-row"><label>Products</label><div id="o-items"></div>
         <button type="button" class="btn ghost sm" style="margin-top:8px" onclick="addOrderItem()">+ Add Product</button>
         <div class="sub tabular" id="o-total" style="margin-top:6px"></div></div>
-      <div class="form-row two"><div><label>Salesperson</label><select id="o-sales">${[''].concat((getForm('enquiry').find(f=>f.label==='Salesperson')?.options||SALES)).map(s=>`<option ${(o.salesperson||'')===s?'selected':''}>${s}</option>`).join('')}</select></div>
-        <div><label>Payment</label><select id="o-pay"><option ${o.payment==='Pending'?'selected':''}>Pending</option><option ${o.payment==='Partial'?'selected':''}>Partial</option><option ${o.payment==='Paid'?'selected':''}>Paid</option></select></div></div>
-      <div class="form-row two"><div><label>Status</label><select id="o-stat">${['Confirmed','In Production','Ready','Dispatched','Delivered','Cancelled'].map(s=>`<option ${o.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="form-row two"><div><label>${_lbl('o_sales','Salesperson')}</label><select id="o-sales">${[''].concat((getForm('enquiry').find(f=>f.label==='Salesperson')?.options||SALES)).map(s=>`<option ${(o.salesperson||'')===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div><label>${_lbl('o_pay','Payment')}</label><select id="o-pay"${_req('o_pay')}>${_opt('o_pay',['Pending','Partial','Paid']).map(s=>`<option ${o.payment===s?'selected':''}>${s}</option>`).join('')}</select></div></div>
+      <div class="form-row two"><div><label>${_lbl('o_stat','Status')}</label><select id="o-stat">${_opt('o_stat',['Confirmed','In Production','Ready','Dispatched','Delivered','Cancelled']).map(s=>`<option ${o.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
         <div><label>Expected Dispatch</label><input id="o-exp" type="date" value="${o.expDispatch||today()}"></div></div>
-      <div class="form-row"><label>Note</label><textarea id="o-note" rows="2" placeholder="Order note">${o.note||''}</textarea></div>
+      <div class="form-row"><label>${_lbl('o_note','Note')}</label><textarea id="o-note" rows="2" placeholder="Order note">${o.note||''}</textarea></div>
     </div>
     <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveOrder('${id||''}')">Save Order</button></div>`);
   renderOrderItems();
