@@ -810,32 +810,70 @@ function openEnqModal(id){
 }
 function openOrderModal(id){
   const o=id?DB.orders().find(x=>x.id===id):{};
-  const prods=DB.products(), custs=DB.customers();
-  openModal(`<div class="modal-head"><h3>${id?'Edit':'New'} Order</h3><button class="icon-btn" onclick="closeModal()">✕</button></div>
+  const custs=DB.customers();
+  window.__orderItems = (o.items && o.items.length)
+    ? o.items.map(it=>({prodId:it.prodId, product:it.product, qty:it.qty, price:it.price}))
+    : (o.product ? [{prodId:o.prodId, product:o.product, qty:o.qty||1, price:(o.qty?o.amount/o.qty:0)}] : [{prodId:'', product:'', qty:1, price:0}]);
+  openModal(`<div class="modal-head"><h3>${id?'Edit':'New'} Order</h3><button class="icon-btn" onclick="closeModal()">\u2715</button></div>
     <div class="modal-body">
       <div class="form-row"><label>Customer</label><select id="o-cust">${custs.map(c=>`<option ${o.custId===c.id?'selected':''}>${c.name}</option>`).join('')}</select></div>
-      <div class="form-row two"><div><label>Product</label><select id="o-prod">${prods.map(p=>`<option ${o.prodId===p.id?'selected':''} data-price="${p.price}" data-id="${p.id}">${p.name}</option>`).join('')}</select></div>
-        <div><label>Quantity</label><input id="o-qty" type="number" min="1" value="${o.qty||1}"></div></div>
+      <div class="form-row"><label>Products</label><div id="o-items"></div>
+        <button type="button" class="btn ghost sm" style="margin-top:8px" onclick="addOrderItem()">${I.plus}Add Product</button>
+        <div class="sub tabular" id="o-total" style="margin-top:6px"></div></div>
       <div class="form-row two"><div><label>Salesperson</label><input id="o-sales" value="${o.salesperson||''}" placeholder="Salesperson"></div>
         <div><label>Payment</label><select id="o-pay"><option ${o.payment==='Pending'?'selected':''}>Pending</option><option ${o.payment==='Partial'?'selected':''}>Partial</option><option ${o.payment==='Paid'?'selected':''}>Paid</option></select></div></div>
       <div class="form-row two"><div><label>Status</label><select id="o-stat">${['Confirmed','In Production','Ready','Dispatched','Delivered','Cancelled'].map(s=>`<option ${o.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
         <div><label>Expected Dispatch</label><input id="o-exp" type="date" value="${o.expDispatch||today()}"></div></div>
-      <div class="form-row"><label>Upload Product Image</label><input id="o-img" type="file" accept="image/*"><div id="o-img-prev" style="margin-top:8px">${o.image?`<img src="${o.image}" style="max-width:120px;max-height:120px;border-radius:8px;border:1px solid var(--border)">`:''}</div></div>
+      <div class="form-row"><label>Upload Product Image</label><input id="o-img" type="file" accept="image/*"><div id="o-img-prev" style="margin-top:8px">${o.image?`<img src="${o.image}" style="max-height:60px;border-radius:8px">`:''}</div></div>
       <div class="form-row"><label>Note</label><textarea id="o-note" rows="2" placeholder="Order note">${o.note||''}</textarea></div>
     </div>
-    <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveOrder(${id?`'${id}'`:''})">Save Order</button></div>`);
-  var fin=document.getElementById('o-img');
-  if(fin){ fin.addEventListener('change',function(){ var f=this.files[0]; if(!f) return; var rd=new FileReader(); rd.onload=function(ev){ window.__orderImg=ev.target.result; document.getElementById('o-img-prev').innerHTML='<img src="'+ev.target.result+'" style="max-width:120px;max-height:120px;border-radius:8px;border:1px solid var(--border)">'; }; rd.readAsDataURL(f); }); }
+    <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveOrder('${id||''}')">Save Order</button></div>`);
+  renderOrderItems();
+  const fin=document.getElementById('o-img'); if(fin) fin.addEventListener('change',function(){ if(this.files&&this.files[0]){ var rd=new FileReader(); rd.onload=function(e){ window.__orderImg=e.target.result; document.getElementById('o-img-prev').innerHTML='<img src="'+e.target.result+'" style="max-height:60px;border-radius:8px">'; }; rd.readAsDataURL(this.files[0]); } });
+}
+function orderProdOptions(sel){
+  return DB.products().map(p=>`<option ${sel===p.id?'selected':''} data-price="${p.price}" data-id="${p.id}">${p.name}</option>`).join('');
+}
+function renderOrderItems(){
+  const wrap=document.getElementById('o-items'); if(!wrap) return;
+  wrap.innerHTML = window.__orderItems.map((it,i)=>`<div class="form-row two" style="margin-bottom:6px" data-row="${i}">
+    <div><select class="oi-prod" data-i="${i}" onchange="onOrderItemChange(${i})"><option value="">-- Select product --</option>${orderProdOptions(it.prodId)}</select></div>
+    <div style="display:flex;gap:6px;align-items:center"><input class="oi-qty" data-i="${i}" type="number" min="1" value="${it.qty||1}" onchange="onOrderItemChange(${i})" style="flex:1">
+    ${window.__orderItems.length>1?`<button type="button" class="icon-btn" title="Remove" onclick="removeOrderItem(${i})">\u2715</button>`:''}</div></div>`).join('');
+  updateOrderTotal();
+}
+function readOrderItems(){
+  document.querySelectorAll('#o-items [data-row]').forEach(row=>{
+    const i=+row.getAttribute('data-row');
+    const sel=row.querySelector('.oi-prod'); const opt=sel.selectedOptions[0];
+    const qty=+row.querySelector('.oi-qty').value||1;
+    window.__orderItems[i]={ prodId:opt?opt.dataset.id:'', product:sel.value, qty, price:opt?+opt.dataset.price:0 };
+  });
+}
+function onOrderItemChange(i){ readOrderItems(); updateOrderTotal(); }
+function addOrderItem(){ readOrderItems(); window.__orderItems.push({prodId:'',product:'',qty:1,price:0}); renderOrderItems(); }
+function removeOrderItem(i){ readOrderItems(); window.__orderItems.splice(i,1); renderOrderItems(); }
+function updateOrderTotal(){
+  const el=document.getElementById('o-total'); if(!el) return;
+  const total=window.__orderItems.reduce((s,it)=>s+(it.price*it.qty||0),0);
+  const n=window.__orderItems.filter(it=>it.product).length;
+  el.textContent = n+' item'+(n===1?'':'s')+' - Total '+money(total);
 }
 function saveOrder(id){
-  const prodSel=document.getElementById('o-prod').selectedOptions[0];
-  const qty=+document.getElementById('o-qty').value||1;
+  readOrderItems();
+  const items=window.__orderItems.filter(it=>it.product);
+  if(!items.length){ toast('Add at least one product'); return; }
+  const totalQty=items.reduce((s,it)=>s+(+it.qty||0),0);
+  const totalAmt=items.reduce((s,it)=>s+(it.price*it.qty||0),0);
   const existing=id?DB.orders().find(x=>x.id===id):{};
+  const first=items[0];
   const rec={
     customer:document.getElementById('o-cust').value,
     custId:(DB.customers().find(c=>c.name===document.getElementById('o-cust').value)||{}).id,
-    product:document.getElementById('o-prod').value, prodId:prodSel.dataset.id, qty,
-    amount:(+prodSel.dataset.price)*qty,
+    items,
+    product: items.length>1 ? (first.product+' +'+(items.length-1)+' more') : first.product,
+    prodId: first.prodId, qty: totalQty,
+    amount: totalAmt,
     salesperson:document.getElementById('o-sales').value,
     payment:document.getElementById('o-pay').value,
     status:document.getElementById('o-stat').value,
@@ -845,7 +883,7 @@ function saveOrder(id){
   };
   const list=DB.orders();
   if(id){Object.assign(list.find(x=>x.id===id),rec);} else {rec.id=uid('ORD-');rec.date=today();list.unshift(rec);}
-  DB.save('orders',list); window.__orderImg=null; closeModal(); toast(id?'Order updated ✓':'Order added ✓'); refreshBadges(); setView('orders');
+  DB.save('orders',list); window.__orderImg=null; closeModal(); toast(id?'Order updated':'Order added'); refreshBadges(); setView('orders');
 }
 function saveEnq(id){
   const prodSel=document.getElementById('m-prod').selectedOptions[0];
