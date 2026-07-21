@@ -809,62 +809,109 @@ function openEnqModal(id){
     <div class="modal-foot"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveEnq('${id||''}')">${I.check}Save Enquiry</button></div>`);
 }
 function openOrderModal(id){
-  const o=id?DB.orders().find(x=>x.id===id):{};
-  const custs=DB.customers();
+  const o = id ? DB.orders().find(x=>x.id===id) : {};
+  const custs = DB.customers();
   window.__orderItems = (o.items && o.items.length)
-    ? o.items.map(it=>({prodId:it.prodId, product:it.product, qty:it.qty, price:it.price}))
-    : (o.product ? [{prodId:o.prodId, product:o.product, qty:o.qty||1, price:(o.qty?o.amount/o.qty:0)}] : [{prodId:'', product:'', qty:1, price:0}]);
-  openModal(`<div class="modal-head"><h3>${id?'Edit':'New'} Order</h3><button class="icon-btn" onclick="closeModal()">\u2715</button></div>
+    ? o.items.map(it=>({type:it.type||'EXISTING PRODUCT', prodId:it.prodId||'', product:it.product||'', spec:it.spec||'', image:it.image||'', qty:it.qty||1, rate:(it.rate!=null?it.rate:(it.price||0))}))
+    : (o.product ? [{type:'EXISTING PRODUCT', prodId:o.prodId||'', product:o.product, spec:'', image:o.image||'', qty:o.qty||1, rate:(o.qty?(o.amount/o.qty):0)}]
+              : [{type:'EXISTING PRODUCT', prodId:'', product:'', spec:'', image:'', qty:1, rate:0}]);
+  openModal(`<div class="modal-head"><h3>${id?'Edit':'New'} Order</h3><button class="icon-btn" onclick="closeModal()">✕</button></div>
     <div class="modal-body">
       <div class="form-row"><label>Customer</label><select id="o-cust">${custs.map(c=>`<option ${o.custId===c.id?'selected':''}>${c.name}</option>`).join('')}</select></div>
       <div class="form-row"><label>Products</label><div id="o-items"></div>
-        <button type="button" class="btn ghost sm" style="margin-top:8px" onclick="addOrderItem()">${I.plus}Add Product</button>
+        <button type="button" class="btn ghost sm" style="margin-top:8px" onclick="addOrderItem()">+ Add Product</button>
         <div class="sub tabular" id="o-total" style="margin-top:6px"></div></div>
       <div class="form-row two"><div><label>Salesperson</label><input id="o-sales" value="${o.salesperson||''}" placeholder="Salesperson"></div>
         <div><label>Payment</label><select id="o-pay"><option ${o.payment==='Pending'?'selected':''}>Pending</option><option ${o.payment==='Partial'?'selected':''}>Partial</option><option ${o.payment==='Paid'?'selected':''}>Paid</option></select></div></div>
       <div class="form-row two"><div><label>Status</label><select id="o-stat">${['Confirmed','In Production','Ready','Dispatched','Delivered','Cancelled'].map(s=>`<option ${o.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
         <div><label>Expected Dispatch</label><input id="o-exp" type="date" value="${o.expDispatch||today()}"></div></div>
-      <div class="form-row"><label>Upload Product Image</label><input id="o-img" type="file" accept="image/*"><div id="o-img-prev" style="margin-top:8px">${o.image?`<img src="${o.image}" style="max-height:60px;border-radius:8px">`:''}</div></div>
       <div class="form-row"><label>Note</label><textarea id="o-note" rows="2" placeholder="Order note">${o.note||''}</textarea></div>
     </div>
     <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveOrder('${id||''}')">Save Order</button></div>`);
   renderOrderItems();
-  const fin=document.getElementById('o-img'); if(fin) fin.addEventListener('change',function(){ if(this.files&&this.files[0]){ var rd=new FileReader(); rd.onload=function(e){ window.__orderImg=e.target.result; document.getElementById('o-img-prev').innerHTML='<img src="'+e.target.result+'" style="max-height:60px;border-radius:8px">'; }; rd.readAsDataURL(this.files[0]); } });
 }
 function orderProdOptions(sel){
   return DB.products().map(p=>`<option ${sel===p.id?'selected':''} data-price="${p.price}" data-id="${p.id}">${p.name}</option>`).join('');
 }
 function renderOrderItems(){
   const wrap=document.getElementById('o-items'); if(!wrap) return;
-  wrap.innerHTML = window.__orderItems.map((it,i)=>`<div class="form-row two" style="margin-bottom:6px" data-row="${i}">
-    <div><select class="oi-prod" data-i="${i}" onchange="onOrderItemChange(${i})"><option value="">-- Select product --</option>${orderProdOptions(it.prodId)}</select></div>
-    <div style="display:flex;gap:6px;align-items:center"><input class="oi-qty" data-i="${i}" type="number" min="1" value="${it.qty||1}" onchange="onOrderItemChange(${i})" style="flex:1">
-    ${window.__orderItems.length>1?`<button type="button" class="icon-btn" title="Remove" onclick="removeOrderItem(${i})">\u2715</button>`:''}</div></div>`).join('');
+  const TYPES=['EXISTING PRODUCT','TO BE ORDERED','CUSTOMIZED PRODUCT'];
+  wrap.innerHTML = window.__orderItems.map((it,i)=>{
+    const prods=DB.products();
+    const inList = it.prodId && prods.some(p=>p.id===it.prodId);
+    const manual = !!it.product && !inList;
+    const typeOpts = TYPES.map(t=>`<option ${it.type===t?'selected':''}>${t}</option>`).join('');
+    const nameField = manual
+      ? `<input class="oi-name" data-i="${i}" value="${(it.product||'').replace(/"/g,"&quot;")}" placeholder="Enter product name" onchange="onOrderItemChange(${i})">`
+      : `<select class="oi-prod" data-i="${i}" onchange="onOrderItemChange(${i})"><option value="">-- Select product --</option>${orderProdOptions(it.prodId)}</select>`;
+    const toggle = `<label class="lbl" style="font-size:11px;display:flex;align-items:center;gap:5px;margin-top:4px;cursor:pointer"><input type="checkbox" class="oi-manual" data-i="${i}" ${manual?"checked":""} onchange="toggleProdName(${i})"> Not in list / add new name</label>`;
+    const imgPrev = it.image ? `<img src="${it.image}" style="max-width:70px;max-height:70px;border-radius:8px;margin-top:6px;display:block">` : '';
+    return `<div class="panel" style="background:var(--bg);border:1px solid var(--border);margin-bottom:10px" data-row="${i}">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <strong class="lbl" style="font-size:12px">Product ${i+1}</strong>
+        ${window.__orderItems.length>1?`<button type="button" class="icon-btn" title="Remove" onclick="removeOrderItem(${i})">✕</button>`:''}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:8px">
+        <div><label class="lbl" style="font-size:11px">Order Type</label><select class="oi-type" data-i="${i}" onchange="onOrderItemChange(${i})">${typeOpts}</select></div>
+        <div><label class="lbl" style="font-size:11px">Product Name</label>${nameField}${toggle}</div>
+        <div><label class="lbl" style="font-size:11px">Qty</label><input class="oi-qty" data-i="${i}" type="number" min="1" value="${it.qty||1}" onchange="onOrderItemChange(${i})"></div>
+        <div><label class="lbl" style="font-size:11px">Rate (without GST)</label><input class="oi-rate" data-i="${i}" type="number" min="0" step="0.01" value="${it.rate||0}" onchange="onOrderItemChange(${i})"></div>
+      </div>
+      <div class="form-row" style="margin-top:8px"><label class="lbl" style="font-size:11px">Product Specification</label><textarea class="oi-spec" data-i="${i}" rows="2" placeholder="Material, size, color, finish, etc." onchange="onOrderItemChange(${i})">${it.spec||''}</textarea></div>
+      <div class="form-row"><label class="lbl" style="font-size:11px">Item Image</label><input class="oi-img" data-i="${i}" type="file" accept="image/*" onchange="onOrderImage(${i}, this)">${imgPrev}</div>
+    </div>`;
+  }).join('');
   updateOrderTotal();
 }
 function readOrderItems(){
   document.querySelectorAll('#o-items [data-row]').forEach(row=>{
     const i=+row.getAttribute('data-row');
-    const sel=row.querySelector('.oi-prod'); const opt=sel.selectedOptions[0];
-    const qty=+row.querySelector('.oi-qty').value||1;
-    window.__orderItems[i]={ prodId:opt?opt.dataset.id:'', product:sel.value, qty, price:opt?+opt.dataset.price:0 };
+    const cur=window.__orderItems[i]||{};
+    const type=(row.querySelector('.oi-type')||{}).value||'EXISTING PRODUCT';
+    const sel=row.querySelector('.oi-prod');
+    const nameInp=row.querySelector('.oi-name');
+    let prodId='', product='';
+    if(nameInp){ product=nameInp.value.trim(); prodId=''; }
+    else if(sel){ const opt=sel.selectedOptions[0]; prodId=opt?(opt.dataset.id||''):''; product=sel.value; }
+    const qty=+((row.querySelector('.oi-qty')||{}).value)||1;
+    const rate=+((row.querySelector('.oi-rate')||{}).value)||0;
+    const spec=((row.querySelector('.oi-spec')||{}).value)||'';
+    window.__orderItems[i]={ type, prodId, product, spec, image:cur.image||'', qty, rate };
   });
 }
+function toggleProdName(i){ readOrderItems(); const it=window.__orderItems[i]; if(it){ it.prodId=''; if(!it.product) it.product=''; } renderOrderItems(); }
+function onOrderImage(i, input){
+  const f=input.files && input.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=function(e){
+    const img=new Image();
+    img.onload=function(){
+      const max=520; let w=img.width, h=img.height;
+      if(w>h && w>max){ h=Math.round(h*max/w); w=max; } else if(h>max){ w=Math.round(w*max/h); h=max; }
+      const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      const data=cv.toDataURL('image/jpeg',0.7);
+      readOrderItems(); if(window.__orderItems[i]) window.__orderItems[i].image=data; renderOrderItems();
+    };
+    img.src=e.target.result;
+  };
+  rd.readAsDataURL(f);
+}
 function onOrderItemChange(i){ readOrderItems(); updateOrderTotal(); }
-function addOrderItem(){ readOrderItems(); window.__orderItems.push({prodId:'',product:'',qty:1,price:0}); renderOrderItems(); }
+function addOrderItem(){ readOrderItems(); window.__orderItems.push({type:'EXISTING PRODUCT',prodId:'',product:'',spec:'',image:'',qty:1,rate:0}); renderOrderItems(); }
 function removeOrderItem(i){ readOrderItems(); window.__orderItems.splice(i,1); renderOrderItems(); }
 function updateOrderTotal(){
   const el=document.getElementById('o-total'); if(!el) return;
-  const total=window.__orderItems.reduce((s,it)=>s+(it.price*it.qty||0),0);
+  const total=window.__orderItems.reduce((s,it)=>s+((+it.rate||0)*(+it.qty||0)),0);
   const n=window.__orderItems.filter(it=>it.product).length;
-  el.textContent = n+' item'+(n===1?'':'s')+' - Total '+money(total);
+  el.textContent = n+' item'+(n===1?'':'s')+' - Total (excl. GST) '+money(total);
 }
 function saveOrder(id){
   readOrderItems();
   const items=window.__orderItems.filter(it=>it.product);
   if(!items.length){ toast('Add at least one product'); return; }
   const totalQty=items.reduce((s,it)=>s+(+it.qty||0),0);
-  const totalAmt=items.reduce((s,it)=>s+(it.price*it.qty||0),0);
+  const totalAmt=items.reduce((s,it)=>s+((+it.rate||0)*(+it.qty||0)),0);
   const existing=id?DB.orders().find(x=>x.id===id):{};
   const first=items[0];
   const rec={
@@ -872,18 +919,18 @@ function saveOrder(id){
     custId:(DB.customers().find(c=>c.name===document.getElementById('o-cust').value)||{}).id,
     items,
     product: items.length>1 ? (first.product+' +'+(items.length-1)+' more') : first.product,
-    prodId: first.prodId, qty: totalQty,
+    prodId: first.prodId, orderType: first.type, qty: totalQty,
     amount: totalAmt,
+    image: first.image || existing.image || '',
     salesperson:document.getElementById('o-sales').value,
     payment:document.getElementById('o-pay').value,
     status:document.getElementById('o-stat').value,
     expDispatch:document.getElementById('o-exp').value,
-    note:document.getElementById('o-note').value,
-    image: window.__orderImg || existing.image || ''
+    note:document.getElementById('o-note').value
   };
   const list=DB.orders();
   if(id){Object.assign(list.find(x=>x.id===id),rec);} else {rec.id=uid('ORD-');rec.date=today();list.unshift(rec);}
-  DB.save('orders',list); window.__orderImg=null; closeModal(); toast(id?'Order updated':'Order added'); refreshBadges(); setView('orders');
+  DB.save('orders',list); closeModal(); toast(id?'Order updated':'Order added'); refreshBadges(); setView('orders');
 }
 function saveEnq(id){
   const prodSel=document.getElementById('m-prod').selectedOptions[0];
