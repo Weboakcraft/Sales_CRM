@@ -1262,22 +1262,36 @@ function saveForm(which, fields){
   store.set('formfields', all);
   try{ CLOUD.pushObj('formfields', all); }catch(e){}
 }
+/* ===== Form Builder: reorder questions (arrows + drag & drop) ===== */
+function moveFormField(which, from, to){
+  const fields = getForm(which);
+  if(to<0 || to>=fields.length || from===to) return;
+  const item = fields.splice(from,1)[0];
+  fields.splice(to,0,item);
+  saveForm(which, fields);
+  openFormBuilder(which);
+}
+let __fbDragFrom = null;
+function fbDragStart(which, i, ev){ __fbDragFrom = i; try{ ev.dataTransfer.effectAllowed="move"; ev.dataTransfer.setData("text/plain", String(i)); }catch(e){} }
+function fbDragOver(ev){ ev.preventDefault(); try{ ev.dataTransfer.dropEffect="move"; }catch(e){} if(ev.currentTarget) ev.currentTarget.style.outline="2px dashed var(--brand)"; }
+function fbDragLeave(ev){ if(ev.currentTarget) ev.currentTarget.style.outline=""; }
+function fbDrop(which, i, ev){ ev.preventDefault(); if(ev.currentTarget) ev.currentTarget.style.outline=""; let from=__fbDragFrom; if(from==null){ try{ from=+ev.dataTransfer.getData("text/plain"); }catch(e){} } __fbDragFrom=null; if(from==null||isNaN(from)) return; moveFormField(which, from, i); }
 function openFormBuilder(which){
   const fields = getForm(which);
   const title = {enquiry:'Enquiry Form',order:'Order Form',customer:'Customer Form',product:'Product Form'}[which] || 'Form';
   const rows = fields.map((f,i)=>{
     const locked = f.locked ? ' <span class="chip c-neutral" style="font-size:10px">core</span>' : '';
     const tName = (FIELD_TYPES.find(x=>x.v===f.type)||{}).t || f.type;
-    return '<tr data-i="'+i+'"><td><b>'+f.label+'</b>'+locked+'</td><td class="sub">'+tName+(f.options?(' · '+f.options.length+' choices'):'')+'</td><td>'+(f.required?'Required':'Optional')+'</td>'+
-      '<td><div class="row-actions" style="display:flex">'+
+    return '<tr data-i="'+i+'" draggable="true"'+' ondragstart="fbDragStart(\''+which+'\','+i+',event)"'+' ondragover="fbDragOver(event)" ondragleave="fbDragLeave(event)"'+' ondrop="fbDrop(\''+which+'\','+i+',event)">'+'<td style="cursor:grab;color:var(--muted);text-align:center" title="Drag to reorder">\u2630</td>'+'<td><b>'+f.label+'</b>'+locked+'</td><td class="sub">'+tName+(f.options?(' · '+f.options.length+' choices'):'')+'</td><td>'+(f.required?'Required':'Optional')+'</td>'+
+      '<td><div class="row-actions" style="display:flex">'+'<button onclick="moveFormField(\''+which+'\','+i+','+(i-1)+')" title="Move up"'+(i===0?' disabled style="opacity:.3"':'')+'>\u2191</button>'+'<button onclick="moveFormField(\''+which+'\','+i+','+(i+1)+')" title="Move down"'+(i===fields.length-1?' disabled style="opacity:.3"':'')+'>\u2193</button>'+
       '<button onclick="editFormField(\''+which+'\','+i+')" title="Edit">'+I.edit+'</button>'+
       (f.locked?'':'<button onclick="delFormField(\''+which+'\','+i+')" title="Remove">'+I.trash+'</button>')+
       '</div></td></tr>';
   }).join('');
   openModal('<div class="modal-head"><h3>'+title+' Builder</h3><button class="icon-btn" onclick="closeModal()">\u2715</button></div>'+
     '<div class="modal-body">'+
-    '<p style="color:var(--text-2);font-size:13px;margin-bottom:10px">Add, edit, or remove questions. Core fields are required by the pipeline and can be edited but not removed.</p>'+
-    '<div style="overflow-x:auto"><table><thead><tr><th>Question</th><th>Answer Type</th><th></th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<p style="color:var(--text-2);font-size:13px;margin-bottom:10px">Add, edit, or remove questions. Core fields are required by the pipeline and can be edited but not removed. Use the up/down arrows or drag rows to reorder \u2014 the order applies to the live form and Excel export.</p>'+
+    '<div style="overflow-x:auto"><table><thead><tr><th style="width:28px"></th><th>Question</th><th>Answer Type</th><th></th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
     '<button class="btn primary sm" style="margin-top:12px" onclick="editFormField(\''+which+'\',-1)">'+I.plus+'Add Question</button>'+
     '</div>'+
     '<div class="modal-foot"><button class="btn primary" onclick="closeModal()">Done</button></div>');
