@@ -273,7 +273,8 @@ const CLOUD = {
       this.keys.forEach(k=>{
         if(Array.isArray(d[k])){
           // records stored as {id, data, updatedAt} -> unwrap .data
-          const rows = d[k].map(x=> (x && x.data!==undefined) ? x.data : x);
+          let rows = d[k].map(x=> (x && x.data!==undefined) ? x.data : x);
+            if(k==='users'){ const seen={}; rows = rows.filter(u=>{ const e=(u&&u.email?String(u.email).toLowerCase():''); if(!e) return true; if(seen[e]) return false; seen[e]=1; return true; }); }
           try{ localStorage.setItem(k, JSON.stringify(rows)); }catch(e){ mem[k]=rows; }
         }
       });
@@ -294,7 +295,10 @@ const CLOUD = {
     if(!this.keys.includes(key)) return;
     clearTimeout(this._timers[key]);
     this._timers[key] = setTimeout(()=>{
-      const records = (arr||[]).map(o=>({ id: o.id || ('X'+Date.now()+Math.random().toString(36).slice(2,6)), data: o }));
+      let _arr = arr||[];
+        if(key==='users'){ const seen={}; _arr = _arr.filter(u=>{ const e=(u&&u.email?String(u.email).toLowerCase():''); if(!e) return true; if(seen[e]) return false; seen[e]=1; return true; }); }
+        const _sid = (o)=>{ if(o&&o.id) return o.id; if(key==='users'&&o&&o.email) return 'USR-'+String(o.email).toLowerCase().replace(/[^a-z0-9]/g,'-'); return 'X'+Date.now()+Math.random().toString(36).slice(2,6); };
+        const records = _arr.map(o=>({ id: _sid(o), data: o }));
       fetch(this.url, {method:'POST', redirect:'follow', headers:{'Content-Type':'text/plain;charset=utf-8'},
         body: JSON.stringify({action:'saveMany', collection:key, records})
       }).catch(e=>console.warn('CLOUD push failed', key, e));
@@ -847,6 +851,7 @@ function openEnqModal(id){
       <div class="form-row two"><div><label>${_lbl('f_prio','Priority')}</label><select id="m-prio"${_req('f_prio')}>${_opt('f_prio',['High','Medium','Low']).map(p=>`<option ${e.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
         <div><label>Stage</label><select id="m-stage">${['New','Contacted','Qualified','Quoted','Won','Lost'].map(s=>`<option ${e.stage===s?'selected':''}>${s}</option>`).join('')}</select></div></div>
       <div class="form-row"><label>${_lbl('f_note','Note')}</label><textarea id="m-note" rows="2">${e.note||''}</textarea></div>
+${customFieldsHTML('enquiry', e)}
     </div>
     <div class="modal-foot"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveEnq('${id||''}')">${I.check}Save Enquiry</button></div>`);
 }
@@ -870,6 +875,7 @@ function openOrderModal(id){
       <div class="form-row two"><div><label>${_lbl('o_stat','Status')}</label><select id="o-stat">${_opt('o_stat',['Confirmed','In Production','Ready','Dispatched','Delivered','Cancelled']).map(s=>`<option ${o.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
         <div><label>Expected Dispatch</label><input id="o-exp" type="date" value="${o.expDispatch||today()}"></div></div>
       <div class="form-row"><label>${_lbl('o_note','Note')}</label><textarea id="o-note" rows="2" placeholder="Order note">${o.note||''}</textarea></div>
+    ${customFieldsHTML('order', o)}
     </div>
     <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveOrder('${id||''}')">Save Order</button></div>`);
   renderOrderItems();
@@ -968,7 +974,8 @@ function saveOrder(id){
     payment:document.getElementById('o-pay').value,
     status:document.getElementById('o-stat').value,
     expDispatch:document.getElementById('o-exp').value,
-    note:document.getElementById('o-note').value
+    note:document.getElementById('o-note').value,
+    custom:readCustomFields('order')
   };
   const list=DB.orders();
   if(id){Object.assign(list.find(x=>x.id===id),rec);} else {rec.id=uid('ORD-');rec.date=today();stampOwner(rec);list.unshift(rec);}
@@ -983,7 +990,8 @@ function saveEnq(id){
     product:document.getElementById('m-prod').value, prodId:prodSel.dataset.id, qty,
     source:document.getElementById('m-src').value, salesperson:document.getElementById('m-sales').value,
     priority:document.getElementById('m-prio').value, stage:document.getElementById('m-stage').value,
-    note:document.getElementById('m-note').value, value:(+prodSel.dataset.price)*qty
+    note:document.getElementById('m-note').value, value:(+prodSel.dataset.price)*qty,
+    custom:readCustomFields('enquiry')
   };
   const list=DB.enquiries();
   if(id){Object.assign(list.find(x=>x.id===id),rec);} else {rec.id=uid('ENQ-');rec.date=today();stampOwner(rec);list.unshift(rec);}
@@ -999,10 +1007,11 @@ function openCustModal(id){
       <div class="form-row two"><div><label>Email</label><input id="c-email" value="${c.email||''}"></div><div><label>Phone</label><input id="c-phone" value="${c.phone||''}"></div></div>
       <div class="form-row"><label>GSTIN</label><input id="c-gstin" value="${c.gstin||''}" placeholder="15-digit GSTIN" style="text-transform:uppercase"></div>
       <div class="form-row"><label>Type</label><select id="c-type">${['Enterprise','SMB','Retail'].map(x=>`<option ${c.type===x?'selected':''}>${x}</option>`).join('')}</select></div>
+${customFieldsHTML('customer', c)}
     </div><div class="modal-foot"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveCust('${id||''}')">${I.check}Save</button></div>`);
 }
 function saveCust(id){
-  const rec={name:v('c-name'),contact:v('c-contact'),city:v('c-city'),email:v('c-email'),phone:v('c-phone'),type:v('c-type'),gstin:(v('c-gstin')||'').toUpperCase()};
+  const rec={name:v('c-name'),contact:v('c-contact'),city:v('c-city'),email:v('c-email'),phone:v('c-phone'),type:v('c-type'),gstin:(v('c-gstin')||'').toUpperCase(),custom:readCustomFields('customer')};
   const list=DB.customers();
   if(id){Object.assign(list.find(x=>x.id===id),rec);}else{rec.id=uid('CUST-');rec.since=new Date().getFullYear();list.unshift(rec);}
   DB.save('customers',list); closeModal(); toast('Customer saved ✓'); setView('customers');
@@ -1015,10 +1024,11 @@ function openProdModal(id){
       <div class="form-row two"><div><label>SKU</label><input id="p-sku" value="${p.sku||''}"></div><div><label>Category</label><select id="p-cat">${CATS.map(x=>`<option ${p.cat===x?'selected':''}>${x}</option>`).join('')}</select></div></div>
       <div class="form-row two"><div><label>Unit Price (₹)</label><input id="p-price" type="number" value="${p.price||''}"></div><div><label>Stock</label><input id="p-stock" type="number" value="${p.stock??''}"></div></div>
       <div class="form-row"><label>Unit</label><select id="p-unit">${['pc','set','sqft','box'].map(x=>`<option ${p.unit===x?'selected':''}>${x}</option>`).join('')}</select></div>
+${customFieldsHTML('product', p)}
     </div><div class="modal-foot"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveProd('${id||''}')">${I.check}Save</button></div>`);
 }
 function saveProd(id){
-  const rec={name:v('p-name'),sku:v('p-sku'),cat:v('p-cat'),price:+v('p-price')||0,stock:+v('p-stock')||0,unit:v('p-unit')};
+  const rec={name:v('p-name'),sku:v('p-sku'),cat:v('p-cat'),price:+v('p-price')||0,stock:+v('p-stock')||0,unit:v('p-unit'),custom:readCustomFields('product')};
   const list=DB.products();
   if(id){Object.assign(list.find(x=>x.id===id),rec);}else{rec.id=uid('PRD-');list.unshift(rec);}
   DB.save('products',list); closeModal(); toast('Product saved ✓'); setView('products');
@@ -1203,6 +1213,43 @@ const DEFAULT_FORMS = {
     {id:'p_unit',  label:'Unit', type:'dropdown', options:['pc','set','sqft','box']}
   ]
 };
+
+/* ===== Custom (form-builder) question rendering for live forms ===== */
+const CORE_FIELD_IDS = {enquiry:['f_cust','f_prod','f_qty','f_src','f_sales','f_prio','f_note'],order:['o_cust','o_prod','o_qty','o_sales','o_pay','o_stat','o_img','o_note'],customer:['c_name','c_contact','c_city','c_email','c_phone','c_type'],product:['p_name','p_sku','p_cat','p_price','p_stock','p_unit']};
+function customFieldsFor(which){
+  const core = CORE_FIELD_IDS[which] || [];
+  return getForm(which).filter(f=> f && !f.locked && core.indexOf(f.id)===-1);
+}
+function customFieldsHTML(which, rec){
+  rec = rec || {};
+  const cf = customFieldsFor(which);
+  if(!cf.length) return "";
+  const cv = (rec.custom||{});
+  return cf.map(function(f){
+    const val = (cv[f.id]!=null)?cv[f.id]:"";
+    const dom = "cf-"+which+"-"+f.id;
+    const req = f.required?" required":"";
+    let input="";
+    if(f.type==="longtext"){ input = '<textarea id="'+dom+'" rows="2"'+req+'>'+String(val).replace(/</g,"&lt;")+'</textarea>'; }
+    else if(f.type==="number"){ input = '<input id="'+dom+'" type="number" value="'+String(val).replace(/"/g,"&quot;")+'"'+req+'>'; }
+    else if(f.type==="date"){ input = '<input id="'+dom+'" type="date" value="'+String(val).replace(/"/g,"&quot;")+'"'+req+'>'; }
+    else if(f.type==="checkbox"){ input = '<label style="display:flex;align-items:center;gap:6px;font-weight:500"><input id="'+dom+'" type="checkbox" '+(val?"checked":"")+'> Yes</label>'; }
+    else if(f.type==="dropdown"){ const opts=(f.options||[]).map(function(o){return '<option '+(String(val)===String(o)?"selected":"")+'>'+o+'</option>';}).join(""); input = '<select id="'+dom+'"'+req+'><option value="">-- Select --</option>'+opts+'</select>'; }
+    else if(f.type==="file"){ input = '<input id="'+dom+'" type="file">'; }
+    else { input = '<input id="'+dom+'" type="text" value="'+String(val).replace(/"/g,"&quot;")+'"'+req+'>'; }
+    return '<div class="form-row"><label>'+f.label+(f.required?' <span style="color:var(--crit)">*</span>':"")+'</label>'+input+'</div>';
+  }).join("");
+}
+function readCustomFields(which){
+  const cf = customFieldsFor(which); const out={};
+  cf.forEach(function(f){
+    const el = document.getElementById("cf-"+which+"-"+f.id); if(!el) return;
+    if(f.type==="checkbox") out[f.id]=el.checked;
+    else if(f.type==="number") out[f.id]= el.value===""?"":Number(el.value);
+    else out[f.id]=el.value;
+  });
+  return out;
+}
 function getForm(which){
   const all = store.get('formfields', null) || {};
   if(!all[which]){ all[which] = JSON.parse(JSON.stringify(DEFAULT_FORMS[which])); }
@@ -1473,7 +1520,7 @@ const AUTH = {
   SESSION_KEY: 'crm_session', SESSION_MS: 24*60*60*1000,
   async hash(pw){ const buf=await crypto.subtle.digest('SHA-256', new TextEncoder().encode('oakcraft::'+pw)); return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join(''); },
   users(){ return store.get('users', []).map(x=>(x&&x.data!==undefined)?x.data:x); },
-  saveUsers(list){ store.set('users', list); },
+  saveUsers(list){ const seen={}; const clean=(list||[]).filter(u=>{ const e=(u&&u.email?String(u.email).toLowerCase():''); if(!e) return true; if(seen[e]) return false; seen[e]=1; return true; }); clean.forEach(u=>{ if(u && !u.id && u.email){ u.id='USR-'+String(u.email).toLowerCase().replace(/[^a-z0-9]/g,'-'); } }); store.set('users', clean); },
   find(email){ return this.users().find(u=>u&&(u.email||'').toLowerCase()===(email||'').toLowerCase()); },
   session(){ try{ const s=JSON.parse(localStorage.getItem(this.SESSION_KEY)||'null'); if(s&&s.exp&&Date.now()<s.exp) return s; }catch(e){} return null; },
   setSession(email){ try{ localStorage.setItem(this.SESSION_KEY, JSON.stringify({email, exp:Date.now()+this.SESSION_MS})); }catch(e){} },
