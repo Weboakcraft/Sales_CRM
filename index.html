@@ -1406,6 +1406,23 @@ function resetDemo(){
    EXCEL EXPORT  (SheetJS)
    ============================================================ */
 function xlsxReady(){ return typeof XLSX!=='undefined'; }
+/* ===== Excel: append custom form-builder answers as extra columns ===== */
+function appendCustomColumns(section, rows){
+  const map = { enquiries:{form:"enquiry", src:DB.enquiries()}, orders:{form:"order", src:DB.orders()}, customers:{form:"customer", src:DB.customers()}, products:{form:"product", src:DB.products()} };
+  const cfg = map[section]; if(!cfg) return rows;
+  const fields = (typeof customFieldsFor==="function") ? customFieldsFor(cfg.form) : [];
+  if(!fields.length) return rows;
+  const byId = {}; cfg.src.forEach(function(o){ if(o&&o.id) byId[o.id]=o; });
+  return rows.map(function(row, i){
+    const idKey = Object.keys(row).find(function(k){ return /\bID\b/i.test(k) || k==="Product ID" || k==="Customer ID" || k==="Order ID" || k==="Enquiry ID"; });
+    const rid = idKey ? row[idKey] : null;
+    const rec = (rid && byId[rid]) ? byId[rid] : cfg.src[i];
+    const cust = (rec && rec.custom) ? rec.custom : {};
+    const extra = {};
+    fields.forEach(function(f){ let v = cust[f.id]; if(f.type==="checkbox") v = v?"Yes":"No"; if(v==null) v=""; extra[f.label]=v; });
+    return Object.assign({}, row, extra);
+  });
+}
 function exportExcel(section){
   if(!xlsxReady()){ toast('Excel library still loading — try again'); return; }
   const q=(document.getElementById('globalSearch')?.value||'').toLowerCase();
@@ -1417,6 +1434,7 @@ function exportExcel(section){
   else if(section==='customers'){ const ord=DB.orders(); rows=DB.customers().map(c=>{const co=ord.filter(o=>o.custId===c.id);return {'Customer ID':c.id,Company:c.name,'Contact Person':c.contact,Email:c.email,Phone:c.phone,City:c.city,Type:c.type,Orders:co.length,'Lifetime Value':co.reduce((s,o)=>s+o.amount,0)};}); }
   else if(section==='products'){ rows=DB.products().map(p=>({'Product ID':p.id,Name:p.name,SKU:p.sku,Category:p.cat,'Unit Price':p.price,Stock:p.stock,Unit:p.unit,'Stock Value':p.price*p.stock})); }
   if(!rows.length){ toast('Nothing to export'); return; }
+  rows = appendCustomColumns(section, rows);
   const ws=XLSX.utils.json_to_sheet(rows);
   // auto column widths
   const cols=Object.keys(rows[0]).map(k=>({wch:Math.min(Math.max(k.length,...rows.map(r=>String(r[k]??'').length))+2,40)}));
